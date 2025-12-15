@@ -56,9 +56,6 @@ lazy_static = "1.4"
 sha1 = "0.10"
 num-bigint = "0.4"
 
-# HTTP Client for Esplora API (BTC Lock)
-ureq = { version = "2.9", features = ["json"] }
-
 [profile.release]
 opt-level = 3
 lto = true

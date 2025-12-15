@@ -1,0 +1,15 @@
+[
+  {
+    "lock_id": "moon_lock_00000001",
+    "btc_txid": "b43fe2718e95e541ba29eb179d707291ac9e7c418871ce7a9703948690599f1e",
+    "btc_vout": 0,
+    "redeem_script_hex": "635221030df53d72ff6b6e8d96f446bdb084640bb813712b88b924af58e87b0e51d9e5a421022985dd1f1962526681d62e06812db208de363b7cbc9b6d5040512f8848b19fcc52ae6703905849b175210267a1aec505bcce46096c4f9de6c9658a9da361313787b5f08cdd0d60572162ddac68",
+    "template": "MultisigCltv",
+    "timelock_block": 4806800,
+    "registered_at": 1765841745,
+    "state": "Locked",
+    "last_checked": 1765841745,
+    "amount_sats": 189592,
+    "p2wsh_address": "tb1qwtufpynpv4tmjv4mtdwjj9uswfqm9qm6tlkwf2uzqk4599jfawgskg9vwa"
+  }
+]

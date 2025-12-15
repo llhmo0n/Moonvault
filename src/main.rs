@@ -41,6 +41,7 @@ mod contracts;
 mod channels;
 mod atomic_swaps;
 mod merkle;
+mod btc_lock;
 mod vaults;
 mod recovery;
 mod inheritance;
@@ -384,6 +385,162 @@ enum Commands {
     
     /// Merkle trees demo
     MerkleDemo,
+
+    // ========== BTC LOCK-OPERATE-SETTLE ==========
+    
+    /// [BTC-LOCK] Show available LOCK STANDARD templates
+    BtcLockTemplates,
+    
+    /// [BTC-LOCK] Generate a LOCK script for Bitcoin
+    BtcLockGenerate {
+        /// Template: multisig_cltv or htlc_simple
+        #[arg(short, long, default_value = "multisig_cltv")]
+        template: String,
+        /// Hot wallet pubkey (33 bytes hex)
+        #[arg(long)]
+        pubkey_hot: String,
+        /// Cold wallet pubkey (33 bytes hex)
+        #[arg(long)]
+        pubkey_cold: String,
+        /// Recovery pubkey (33 bytes hex)
+        #[arg(long)]
+        pubkey_recovery: String,
+        /// Timelock block height
+        #[arg(long)]
+        timelock: u32,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] Verify a script matches LOCK STANDARD
+    BtcLockVerify {
+        /// Redeem script in hex
+        script: String,
+    },
+    
+    /// [BTC-LOCK] Register a BTC LOCK (observation only)
+    BtcLockRegister {
+        /// Bitcoin transaction ID (64 hex chars)
+        #[arg(long)]
+        txid: String,
+        /// Output index
+        #[arg(long, default_value = "0")]
+        vout: u32,
+        /// Redeem script in hex
+        #[arg(long)]
+        script: String,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] Show status of a registered LOCK
+    BtcLockStatus {
+        /// Bitcoin transaction ID
+        #[arg(long)]
+        txid: String,
+        /// Output index
+        #[arg(long, default_value = "0")]
+        vout: u32,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] List all registered BTC LOCKs
+    BtcLockList {
+        /// Filter by state: locked, expired, settled, all
+        #[arg(long, default_value = "all")]
+        state: String,
+    },
+    
+    /// [BTC-LOCK] Check if LOCK is ready for settlement
+    BtcLockSettleCheck {
+        /// Bitcoin transaction ID
+        #[arg(long)]
+        txid: String,
+        /// Output index
+        #[arg(long, default_value = "0")]
+        vout: u32,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] Demo the complete LOCK-OPERATE-SETTLE flow
+    BtcLockDemo,
+    
+    /// [BTC-LOCK] Test connection to Bitcoin network (Esplora API)
+    BtcLockConnect {
+        /// Use testnet instead of mainnet
+        #[arg(long)]
+        testnet: bool,
+        /// Use signet
+        #[arg(long)]
+        signet: bool,
+    },
+    
+    /// [BTC-LOCK] Query a Bitcoin transaction (real network)
+    BtcLockQueryTx {
+        /// Transaction ID to query
+        txid: String,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] Check UTXO status on real Bitcoin network
+    BtcLockCheckUtxo {
+        /// Transaction ID
+        #[arg(long)]
+        txid: String,
+        /// Output index
+        #[arg(long, default_value = "0")]
+        vout: u32,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] Generate test keypairs for LOCK scripts (TESTNET ONLY)
+    BtcLockKeygen {
+        /// Number of keypairs to generate (default: 3 for hot/cold/recovery)
+        #[arg(long, default_value = "3")]
+        count: u32,
+    },
+    
+    /// [BTC-LOCK] Refresh status of all registered LOCKs
+    BtcLockRefresh {
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [BTC-LOCK] System health check - verify all BTC Lock components
+    BtcLockHealth,
+    
+    /// [BTC-LOCK] Build settlement transaction to recover BTC
+    BtcLockSettle {
+        /// Bitcoin transaction ID of the LOCK
+        #[arg(long)]
+        txid: String,
+        /// Output index
+        #[arg(long, default_value = "0")]
+        vout: u32,
+        /// Destination address (where to send recovered BTC)
+        #[arg(long)]
+        destination: String,
+        /// Recovery private key (hex)
+        #[arg(long)]
+        privkey: String,
+        /// Fee rate in sat/vbyte (default: 2)
+        #[arg(long, default_value = "2")]
+        fee_rate: u64,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
 }
 
 // =============================================================================
@@ -467,6 +624,23 @@ async fn main() {
         Some(Commands::ChannelsDemo) => cmd_channels_demo(),
         Some(Commands::AtomicSwapsDemo) => cmd_atomic_swaps_demo(),
         Some(Commands::MerkleDemo) => cmd_merkle_demo(),
+        Some(Commands::BtcLockTemplates) => cmd_btc_lock_templates(),
+        Some(Commands::BtcLockGenerate { template, pubkey_hot, pubkey_cold, pubkey_recovery, timelock, testnet }) 
+            => cmd_btc_lock_generate(template, pubkey_hot, pubkey_cold, pubkey_recovery, timelock, testnet),
+        Some(Commands::BtcLockVerify { script }) => cmd_btc_lock_verify(script),
+        Some(Commands::BtcLockRegister { txid, vout, script, testnet }) => cmd_btc_lock_register(txid, vout, script, testnet),
+        Some(Commands::BtcLockStatus { txid, vout, testnet }) => cmd_btc_lock_status(txid, vout, testnet),
+        Some(Commands::BtcLockList { state }) => cmd_btc_lock_list(state),
+        Some(Commands::BtcLockSettleCheck { txid, vout, testnet }) => cmd_btc_lock_settle_check(txid, vout, testnet),
+        Some(Commands::BtcLockDemo) => cmd_btc_lock_demo(),
+        Some(Commands::BtcLockConnect { testnet, signet }) => cmd_btc_lock_connect(testnet, signet),
+        Some(Commands::BtcLockQueryTx { txid, testnet }) => cmd_btc_lock_query_tx(txid, testnet),
+        Some(Commands::BtcLockCheckUtxo { txid, vout, testnet }) => cmd_btc_lock_check_utxo(txid, vout, testnet),
+        Some(Commands::BtcLockKeygen { count }) => cmd_btc_lock_keygen(count),
+        Some(Commands::BtcLockRefresh { testnet }) => cmd_btc_lock_refresh(testnet),
+        Some(Commands::BtcLockHealth) => cmd_btc_lock_health(),
+        Some(Commands::BtcLockSettle { txid, vout, destination, privkey, fee_rate, testnet }) 
+            => cmd_btc_lock_settle(txid, vout, destination, privkey, fee_rate, testnet),
     }
 }
 
@@ -5562,4 +5736,1414 @@ fn cmd_merkle_demo() {
     println!("  🌳 Merkle trees fully operational!");
     println!("  📱 SPV light clients can verify transactions efficiently!");
     println!();
+}
+
+// =============================================================================
+// BTC LOCK-OPERATE-SETTLE COMMANDS
+// =============================================================================
+
+use crate::btc_lock::{
+    LockRegistry, LockState, LockTemplate, MockBtcObserver, BtcObserver,
+    EsploraObserver, BitcoinNetwork,
+    MultisigCltvParams, HtlcSimpleParams,
+    generate_multisig_cltv, generate_htlc_simple, match_lock_template,
+    script_to_p2wsh_address, get_timelock_status, estimate_time_remaining,
+    format_btc as format_btc_lock, confirm as confirm_btc_lock,
+    WARNING_LOCK_GENERATE, WARNING_OBSERVE_REGISTER, WARNING_SETTLEMENT,
+    SettlementParams, build_settlement_tx, estimate_settlement_fee,
+};
+
+fn cmd_btc_lock_templates() {
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - TEMPLATES DISPONIBLES");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    println!("  ┌─────────────────────────────────────────────────────────┐");
+    println!("  │ 1. multisig_cltv (DEFAULT)                              │");
+    println!("  │    ─────────────────────────────────────────────────────│");
+    println!("  │    2-of-2 multisig O salida unilateral después de       │");
+    println!("  │    timelock.                                            │");
+    println!("  │                                                         │");
+    println!("  │    Parámetros:                                          │");
+    println!("  │      --pubkey-hot       Clave caliente (33 bytes hex)   │");
+    println!("  │      --pubkey-cold      Clave fría (33 bytes hex)       │");
+    println!("  │      --pubkey-recovery  Clave de recuperación           │");
+    println!("  │      --timelock         Altura de bloque para expirar   │");
+    println!("  │                                                         │");
+    println!("  │    Uso:                                                 │");
+    println!("  │      - Gasto inmediato: requiere hot + cold keys        │");
+    println!("  │      - Después de timelock: solo recovery key           │");
+    println!("  ├─────────────────────────────────────────────────────────┤");
+    println!("  │ 2. htlc_simple                                          │");
+    println!("  │    ─────────────────────────────────────────────────────│");
+    println!("  │    Hash-locked con timeout de refund.                   │");
+    println!("  │                                                         │");
+    println!("  │    Parámetros:                                          │");
+    println!("  │      --hash      SHA256 hash (32 bytes hex)             │");
+    println!("  │      --pubkey    Clave pública (33 bytes hex)           │");
+    println!("  │      --timeout   Bloques relativos para refund          │");
+    println!("  │                                                         │");
+    println!("  │    Uso:                                                 │");
+    println!("  │      - Con preimage: gasto inmediato                    │");
+    println!("  │      - Después de timeout: refund automático            │");
+    println!("  └─────────────────────────────────────────────────────────┘");
+    println!();
+    println!("  ⚠️  ADVERTENCIA:");
+    println!("  Mooncoin NO valida la corrección semántica del script.");
+    println!("  Un script mal formado puede causar PÉRDIDA PERMANENTE de BTC.");
+    println!();
+}
+
+fn cmd_btc_lock_generate(
+    template: String,
+    pubkey_hot: String,
+    pubkey_cold: String,
+    pubkey_recovery: String,
+    timelock: u32,
+    testnet: bool,
+) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - GENERAR SCRIPT [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    
+    println!("{}", WARNING_LOCK_GENERATE);
+    
+    if !confirm_btc_lock("  ¿Entiendes y aceptas estos riesgos?") {
+        println!("\n  ❌ Operación cancelada por el usuario.");
+        return;
+    }
+    
+    let result = match template.as_str() {
+        "multisig_cltv" => {
+            let params = MultisigCltvParams {
+                pubkey_hot,
+                pubkey_cold,
+                pubkey_recovery,
+                locktime_blocks: timelock,
+            };
+            generate_multisig_cltv(&params)
+        }
+        "htlc_simple" => {
+            println!("\n  ❌ Para htlc_simple, use parámetros diferentes.");
+            println!("     Ejecute: mooncoin btc-lock-templates para ver opciones.");
+            return;
+        }
+        _ => {
+            println!("\n  ❌ Template desconocido: {}", template);
+            println!("     Use: multisig_cltv o htlc_simple");
+            return;
+        }
+    };
+    
+    match result {
+        Ok(script) => {
+            let script_hex = hex::encode(&script);
+            let p2wsh_address = script_to_p2wsh_address(&script, !testnet);
+            
+            match match_lock_template(&script) {
+                Ok(Some(matched)) => {
+                    println!();
+                    println!("  ✅ SCRIPT GENERADO EXITOSAMENTE");
+                    println!("  ─────────────────────────────────────────────────────────────");
+                    println!();
+                    println!("  Red:             {}", network);
+                    println!("  Template:        {}", matched.template);
+                    println!("  Timelock:        Bloque {}", matched.timelock_value);
+                    println!();
+                    println!("  Redeem Script (hex):");
+                    println!("  {}", script_hex);
+                    println!();
+                    println!("  P2WSH Address (enviar BTC aquí):");
+                    println!("  {}", p2wsh_address);
+                    println!();
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!("  📋 REQUISITOS DE BACKUP (OBLIGATORIO)");
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!();
+                    println!("  1. Guardar el redeem script de arriba");
+                    println!("  2. Guardar tu clave privada de recuperación");
+                    println!("  3. Anotar el bloque timelock: {}", matched.timelock_value);
+                    println!();
+                    println!("  ⚠️  Sin estos, NO PODRÁS recuperar tu BTC.");
+                    println!();
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!("  📌 PRÓXIMOS PASOS");
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!();
+                    println!("  1. Envía BTC a la dirección P2WSH de arriba");
+                    println!("  2. Espera 6+ confirmaciones");
+                    println!("  3. Registra el LOCK en Mooncoin:");
+                    let testnet_flag = if testnet { " --testnet" } else { "" };
+                    println!("     mooncoin btc-lock-register --txid <TXID> --vout 0{} \\", testnet_flag);
+                    println!("       --script {}", script_hex);
+                    println!();
+                }
+                Ok(None) => {
+                    println!("\n  ❌ Error interno: script generado no coincide con template");
+                }
+                Err(e) => {
+                    println!("\n  ❌ Error verificando script: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            println!("\n  ❌ Error generando script: {}", e);
+        }
+    }
+}
+
+fn cmd_btc_lock_verify(script_hex: String) {
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - VERIFICAR SCRIPT");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    let script = match hex::decode(&script_hex) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("  ❌ Error: hex inválido - {}", e);
+            return;
+        }
+    };
+    
+    match match_lock_template(&script) {
+        Ok(Some(matched)) => {
+            println!("  ✅ Script coincide con LOCK STANDARD");
+            println!();
+            println!("  Template:       {}", matched.template);
+            println!("  Timelock:       Bloque {}", matched.timelock_value);
+            println!("  Tipo timelock:  {:?}", matched.timelock_type);
+            println!("  Pubkeys:        {} encontradas", matched.pubkeys.len());
+            
+            for (i, pk) in matched.pubkeys.iter().enumerate() {
+                println!("    Pubkey {}:     {}...", i + 1, &pk[..16]);
+            }
+            
+            let p2wsh = script_to_p2wsh_address(&script, true);
+            println!();
+            println!("  P2WSH Address:  {}", p2wsh);
+        }
+        Ok(None) => {
+            println!("  ❌ Script NO coincide con ningún template LOCK STANDARD");
+            println!();
+            println!("  Templates válidos:");
+            println!("    - multisig_cltv");
+            println!("    - htlc_simple");
+        }
+        Err(e) => {
+            println!("  ❌ Error parseando script: {}", e);
+        }
+    }
+    println!();
+}
+
+fn cmd_btc_lock_register(txid: String, vout: u32, script_hex: String, testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - REGISTRAR LOCK [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    
+    if txid.len() != 64 || hex::decode(&txid).is_err() {
+        println!("\n  ❌ Error: txid inválido (debe ser 64 caracteres hex)");
+        return;
+    }
+    
+    let script = match hex::decode(&script_hex) {
+        Ok(s) => s,
+        Err(e) => {
+            println!("\n  ❌ Error: script hex inválido - {}", e);
+            return;
+        }
+    };
+    
+    let template_match = match match_lock_template(&script) {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            println!("\n  ❌ Error: script no coincide con ningún template LOCK STANDARD");
+            return;
+        }
+        Err(e) => {
+            println!("\n  ❌ Error parseando script: {}", e);
+            return;
+        }
+    };
+    
+    // Conectar a Bitcoin para verificar UTXO
+    println!();
+    println!("  🔍 Conectando a Bitcoin {}...", network);
+    
+    let observer = if testnet {
+        EsploraObserver::testnet()
+    } else {
+        EsploraObserver::mainnet()
+    };
+    
+    // Verificar UTXO
+    let (utxo_exists, amount_sats, confirmations) = match observer.get_utxo(&txid, vout) {
+        Ok(Some(utxo)) => {
+            if utxo.spent {
+                println!("  ⚠️  ADVERTENCIA: Este UTXO ya ha sido GASTADO");
+                (false, Some(utxo.amount_sats), utxo.confirmations)
+            } else {
+                println!("  ✅ UTXO encontrado: {} sats ({} confirmaciones)", 
+                    utxo.amount_sats, utxo.confirmations);
+                (true, Some(utxo.amount_sats), utxo.confirmations)
+            }
+        }
+        Ok(None) => {
+            println!("  ❌ Error: UTXO no encontrado en Bitcoin {}", network);
+            println!("     Verifica que la transacción esté confirmada.");
+            return;
+        }
+        Err(e) => {
+            println!("  ⚠️  No se pudo verificar UTXO: {}", e);
+            println!("     Continuando sin verificación...");
+            (true, None, 0)
+        }
+    };
+    
+    if confirmations < 6 && confirmations > 0 {
+        println!("  ⚠️  ADVERTENCIA: Solo {} confirmaciones (recomendado: 6+)", confirmations);
+    }
+    
+    println!("{}", WARNING_OBSERVE_REGISTER);
+    
+    let mut registry = LockRegistry::load();
+    
+    if registry.find_by_utxo(&txid, vout).is_some() {
+        println!("  ❌ Error: Este LOCK ya está registrado");
+        return;
+    }
+    
+    let p2wsh = script_to_p2wsh_address(&script, !testnet);
+    
+    match registry.register(txid.clone(), vout, &script, &template_match, &p2wsh, amount_sats) {
+        Ok(lock) => {
+            println!();
+            println!("  ✅ LOCK REGISTRADO EXITOSAMENTE");
+            println!("  ─────────────────────────────────────────────────────────────");
+            println!();
+            println!("  Red:            {}", network);
+            println!("  Lock ID:        {}", lock.lock_id);
+            println!("  BTC TXID:       {}...", &lock.btc_txid[..16]);
+            println!("  BTC Vout:       {}", lock.btc_vout);
+            if let Some(amt) = amount_sats {
+                println!("  Cantidad:       {} sats ({:.8} BTC)", amt, amt as f64 / 100_000_000.0);
+            }
+            println!("  Template:       {}", lock.template);
+            println!("  Timelock:       Bloque {}", lock.timelock_block);
+            println!("  Estado:         {}", lock.state);
+            println!("  P2WSH:          {}", lock.p2wsh_address);
+            println!();
+            let testnet_flag = if testnet { " --testnet" } else { "" };
+            println!("  📌 Puedes verificar el estado con:");
+            println!("     mooncoin btc-lock-status --txid {}{}", txid, testnet_flag);
+            println!();
+        }
+        Err(e) => {
+            println!("\n  ❌ Error registrando LOCK: {}", e);
+        }
+    }
+}
+
+fn cmd_btc_lock_status(txid: String, vout: u32, testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - ESTADO DEL LOCK [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    let registry = LockRegistry::load();
+    
+    match registry.find_by_utxo(&txid, vout) {
+        Some(lock) => {
+            println!("  Lock ID:        {}", lock.lock_id);
+            println!("  BTC TXID:       {}", lock.btc_txid);
+            println!("  BTC Vout:       {}", lock.btc_vout);
+            println!("  Template:       {}", lock.template);
+            println!("  Timelock:       Bloque {}", lock.timelock_block);
+            
+            if let Some(amount) = lock.amount_sats {
+                println!("  Cantidad:       {}", format_btc_lock(amount));
+            }
+            
+            // Consultar estado actual en Bitcoin
+            println!();
+            println!("  🔍 Consultando Bitcoin {}...", network);
+            
+            let observer = if testnet {
+                EsploraObserver::testnet()
+            } else {
+                EsploraObserver::mainnet()
+            };
+            
+            let (current_state, current_height) = match (observer.get_utxo(&txid, vout), observer.current_block_height()) {
+                (Ok(Some(utxo)), Ok(height)) => {
+                    println!("  Altura actual:  {}", height);
+                    println!("  Confirmaciones: {}", utxo.confirmations);
+                    
+                    let state = if utxo.spent {
+                        LockState::Settled
+                    } else if height >= lock.timelock_block {
+                        LockState::Expired
+                    } else {
+                        LockState::Locked
+                    };
+                    (state, height)
+                }
+                (Ok(None), _) => {
+                    println!("  ⚠️  UTXO no encontrado (posiblemente gastado)");
+                    (LockState::Settled, 0)
+                }
+                (Err(e), _) | (Ok(Some(_)), Err(e)) => {
+                    println!("  ⚠️  Error consultando: {}", e);
+                    (lock.state.clone(), 0)
+                }
+            };
+            
+            println!("  Estado actual:  {}", current_state);
+            println!("  P2WSH:          {}", lock.p2wsh_address);
+            println!();
+            
+            match current_state {
+                LockState::Locked => {
+                    let blocks_remaining = lock.timelock_block as i32 - current_height as i32;
+                    println!("  ⏳ El LOCK está activo. El timelock aún no ha expirado.");
+                    println!("     Bloque objetivo:    {}", lock.timelock_block);
+                    println!("     Bloques restantes:  {}", blocks_remaining);
+                    if blocks_remaining > 0 {
+                        println!("     Tiempo estimado:    {}", estimate_time_remaining(blocks_remaining));
+                    }
+                }
+                LockState::Expired => {
+                    let testnet_flag = if testnet { " --testnet" } else { "" };
+                    println!("  ✅ El timelock ha EXPIRADO. Puedes hacer settlement.");
+                    println!("     Usa: mooncoin btc-lock-settle-check --txid {}{}", txid, testnet_flag);
+                }
+                LockState::Settled => {
+                    println!("  🏁 El UTXO ha sido GASTADO. Settlement completado.");
+                }
+                LockState::Unknown => {
+                    println!("  ❓ Estado desconocido.");
+                }
+            }
+        }
+        None => {
+            println!("  ❌ LOCK no encontrado en registro local.");
+            println!();
+            let testnet_flag = if testnet { " --testnet" } else { "" };
+            println!("  Para registrar un LOCK:");
+            println!("  mooncoin btc-lock-register --txid {} --vout {}{} --script <hex>", txid, vout, testnet_flag);
+        }
+    }
+    println!();
+}
+
+fn cmd_btc_lock_list(state_filter: String) {
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - LISTA DE LOCKS");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    let registry = LockRegistry::load();
+    let locks = registry.list();
+    
+    if locks.is_empty() {
+        println!("  No hay LOCKs registrados.");
+        println!();
+        println!("  Para registrar un LOCK:");
+        println!("  mooncoin btc-lock-register --txid <TXID> --vout 0 --script <HEX>");
+        println!();
+        return;
+    }
+    
+    let filter: Option<LockState> = match state_filter.to_lowercase().as_str() {
+        "locked" => Some(LockState::Locked),
+        "expired" => Some(LockState::Expired),
+        "settled" => Some(LockState::Settled),
+        _ => None,
+    };
+    
+    let filtered: Vec<_> = locks.iter()
+        .filter(|l| filter.as_ref().map_or(true, |f| &l.state == f))
+        .collect();
+    
+    println!("  {:<20} {:<16} {:<10} {:<12}", "ID", "TXID", "Estado", "Timelock");
+    println!("  {}", "─".repeat(60));
+    
+    for lock in &filtered {
+        let txid_short = format!("{}...", &lock.btc_txid[..12]);
+        println!("  {:<20} {:<16} {:<10} {:<12}",
+            lock.lock_id,
+            txid_short,
+            lock.state.to_string(),
+            lock.timelock_block
+        );
+    }
+    
+    println!();
+    println!("  Total: {} locks", filtered.len());
+    
+    let locked = locks.iter().filter(|l| l.state == LockState::Locked).count();
+    let expired = locks.iter().filter(|l| l.state == LockState::Expired).count();
+    let settled = locks.iter().filter(|l| l.state == LockState::Settled).count();
+    
+    println!("  ({} locked, {} expired, {} settled)", locked, expired, settled);
+    println!();
+}
+
+fn cmd_btc_lock_settle_check(txid: String, vout: u32, testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - VERIFICAR SETTLEMENT [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    let registry = LockRegistry::load();
+    
+    match registry.find_by_utxo(&txid, vout) {
+        Some(lock) => {
+            println!("  Lock ID:        {}", lock.lock_id);
+            println!("  Timelock:       Bloque {}", lock.timelock_block);
+            
+            // Consultar estado real en Bitcoin
+            println!();
+            println!("  🔍 Consultando Bitcoin {}...", network);
+            
+            let observer = if testnet {
+                EsploraObserver::testnet()
+            } else {
+                EsploraObserver::mainnet()
+            };
+            
+            let (current_state, current_height) = match (observer.get_utxo(&txid, vout), observer.current_block_height()) {
+                (Ok(Some(utxo)), Ok(height)) => {
+                    println!("  Altura actual:  {}", height);
+                    
+                    let state = if utxo.spent {
+                        LockState::Settled
+                    } else if height >= lock.timelock_block {
+                        LockState::Expired
+                    } else {
+                        LockState::Locked
+                    };
+                    (state, height)
+                }
+                (Ok(None), _) => {
+                    (LockState::Settled, 0)
+                }
+                (Err(e), _) | (Ok(Some(_)), Err(e)) => {
+                    println!("  ⚠️  Error consultando: {}", e);
+                    (lock.state.clone(), 0)
+                }
+            };
+            
+            println!("  Estado actual:  {}", current_state);
+            println!();
+            
+            match current_state {
+                LockState::Locked => {
+                    let blocks_remaining = lock.timelock_block as i32 - current_height as i32;
+                    println!("  ❌ NO LISTO PARA SETTLEMENT");
+                    println!();
+                    println!("  El timelock aún no ha expirado.");
+                    println!("  Debes esperar hasta el bloque {}.", lock.timelock_block);
+                    println!("  Bloques restantes: {}", blocks_remaining);
+                    if blocks_remaining > 0 {
+                        println!("  Tiempo estimado:   {}", estimate_time_remaining(blocks_remaining));
+                    }
+                }
+                LockState::Expired => {
+                    println!("  ✅ LISTO PARA SETTLEMENT");
+                    println!();
+                    println!("  El timelock ha expirado. Puedes recuperar tu BTC.");
+                    println!();
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!("  📋 INSTRUCCIONES DE SETTLEMENT");
+                    println!("  ═══════════════════════════════════════════════════════════");
+                    println!();
+                    println!("  1. Construye la transacción de salida en tu wallet Bitcoin");
+                    println!("  2. Input: {}:{}", lock.btc_txid, lock.btc_vout);
+                    println!("  3. Redeem script: {}", lock.redeem_script_hex);
+                    println!("  4. nLockTime: {} (OBLIGATORIO para CLTV)", lock.timelock_block);
+                    println!("  5. Firma con tu clave de RECUPERACIÓN");
+                    println!("  6. Witness: [signature, 0x00, redeem_script]");
+                    println!("  7. Broadcast la transacción");
+                    println!();
+                    if let Some(amount) = lock.amount_sats {
+                        println!("  💰 Cantidad a recuperar: {} sats ({:.8} BTC)", 
+                            amount, amount as f64 / 100_000_000.0);
+                        println!("     (menos fee de la transacción)");
+                        println!();
+                    }
+                    println!("  ⚠️  Mooncoin NO firma ni transmite transacciones Bitcoin.");
+                    println!("      Debes usar tu wallet Bitcoin externo.");
+                    println!();
+                }
+                LockState::Settled => {
+                    println!("  🏁 SETTLEMENT YA COMPLETADO");
+                    println!();
+                    println!("  El UTXO ya ha sido gastado.");
+                }
+                LockState::Unknown => {
+                    println!("  ❓ Estado desconocido");
+                }
+            }
+        }
+        None => {
+            println!("  ❌ LOCK no encontrado en registro local.");
+        }
+    }
+    println!();
+}
+
+fn cmd_btc_lock_demo() {
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  🌙 MOONCOIN BTC LOCK - DEMO COMPLETO");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    println!("  Este demo muestra el flujo completo LOCK-OPERATE-SETTLE");
+    println!("  usando un observer mock (sin conexión a Bitcoin real).");
+    println!();
+    
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  1️⃣  GENERAR SCRIPT LOCK");
+    println!("  ─────────────────────────────────────────────────────────────");
+    
+    let params = MultisigCltvParams {
+        pubkey_hot: format!("02{}", "aa".repeat(32)),
+        pubkey_cold: format!("03{}", "bb".repeat(32)),
+        pubkey_recovery: format!("02{}", "cc".repeat(32)),
+        locktime_blocks: 1000,
+    };
+    
+    let script = generate_multisig_cltv(&params).unwrap();
+    let script_hex = hex::encode(&script);
+    let p2wsh = script_to_p2wsh_address(&script, true);
+    
+    println!();
+    println!("  Template:      multisig_cltv");
+    println!("  Timelock:      Bloque 1000");
+    println!("  P2WSH Address: {}", p2wsh);
+    println!("  Script (hex):  {}...", &script_hex[..40]);
+    
+    println!();
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  2️⃣  VERIFICAR SCRIPT");
+    println!("  ─────────────────────────────────────────────────────────────");
+    
+    let matched = match_lock_template(&script).unwrap().unwrap();
+    println!();
+    println!("  ✅ Script coincide con: {}", matched.template);
+    println!("  Timelock detectado:     {}", matched.timelock_value);
+    println!("  Pubkeys encontradas:    {}", matched.pubkeys.len());
+    
+    println!();
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  3️⃣  REGISTRAR LOCK (simulado)");
+    println!("  ─────────────────────────────────────────────────────────────");
+    
+    let mock_txid = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+    let mut mock_observer = MockBtcObserver::new(500);
+    mock_observer.add_utxo(mock_txid, 0, 10_000_000, 6);
+    
+    println!();
+    println!("  Mock Observer:");
+    println!("    - Altura actual:    500");
+    println!("    - UTXO simulado:    {}:0", &mock_txid[..16]);
+    println!("    - Cantidad:         0.1 BTC");
+    println!("    - Confirmaciones:   6");
+    
+    let exists = mock_observer.utxo_exists(mock_txid, 0).unwrap();
+    println!();
+    println!("  ✅ UTXO existe: {}", exists);
+    
+    println!();
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  4️⃣  SIMULAR PASO DEL TIEMPO");
+    println!("  ─────────────────────────────────────────────────────────────");
+    
+    let status = get_timelock_status(&matched, 500);
+    println!();
+    println!("  [Bloque 500] Estado: LOCKED");
+    println!("    Timelock expira en:   Bloque 1000");
+    println!("    Bloques restantes:    {}", status.blocks_remaining);
+    println!("    Tiempo estimado:      {}", estimate_time_remaining(status.blocks_remaining));
+    
+    mock_observer.set_height(800);
+    let status = get_timelock_status(&matched, 800);
+    println!();
+    println!("  [Bloque 800] Estado: LOCKED");
+    println!("    Bloques restantes:    {}", status.blocks_remaining);
+    println!("    Tiempo estimado:      {}", estimate_time_remaining(status.blocks_remaining));
+    
+    mock_observer.set_height(1100);
+    let status = get_timelock_status(&matched, 1100);
+    println!();
+    println!("  [Bloque 1100] Estado: EXPIRED");
+    println!("    Timelock expirado:    ✅");
+    println!("    Bloques pasados:      {}", -status.blocks_remaining);
+    
+    println!();
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  5️⃣  SETTLEMENT");
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!();
+    println!("  ✅ El timelock ha expirado.");
+    println!("  El usuario puede ahora recuperar su BTC:");
+    println!();
+    println!("  1. Construir transacción Bitcoin:");
+    println!("     Input:    {}:0", &mock_txid[..16]);
+    println!("     Output:   <dirección del usuario>");
+    println!("     Locktime: 1000 (para CLTV)");
+    println!();
+    println!("  2. Witness (recovery path):");
+    println!("     [signature_recovery, 0x00, redeem_script]");
+    println!();
+    println!("  3. Firmar con clave de recuperación");
+    println!("  4. Broadcast a Bitcoin network");
+    
+    mock_observer.spend_utxo(mock_txid, 0);
+    let exists = mock_observer.utxo_exists(mock_txid, 0).unwrap();
+    println!();
+    println!("  [Después del broadcast]");
+    println!("  UTXO existe: {} → SETTLED", exists);
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  📊 RESUMEN DEL CICLO LOCK-OPERATE-SETTLE");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    println!("  ┌─────────────────────────────────────────────────────────┐");
+    println!("  │ Fase      │ Acción                                      │");
+    println!("  ├─────────────────────────────────────────────────────────┤");
+    println!("  │ LOCK      │ Usuario crea script, envía BTC              │");
+    println!("  │ OBSERVE   │ Mooncoin observa UTXO (no custodia)         │");
+    println!("  │ OPERATE   │ Usuario opera en Mooncoin (BTC intocado)    │");
+    println!("  │ EXPIRE    │ Timelock expira                             │");
+    println!("  │ SETTLE    │ Usuario recupera BTC con recovery key       │");
+    println!("  └─────────────────────────────────────────────────────────┘");
+    println!();
+    println!("  ⚠️  RECORDATORIO:");
+    println!("  - Mooncoin NUNCA custodia BTC");
+    println!("  - Mooncoin SOLO observa el estado de Bitcoin");
+    println!("  - El usuario es COMPLETAMENTE responsable de sus claves");
+    println!();
+    println!("  🌙 Demo completado!");
+    println!();
+}
+
+fn cmd_btc_lock_connect(testnet: bool, signet: bool) {
+    let network = if signet {
+        BitcoinNetwork::Signet
+    } else if testnet {
+        BitcoinNetwork::Testnet
+    } else {
+        BitcoinNetwork::Mainnet
+    };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - CONECTAR A BITCOIN [{}]", network.name().to_uppercase());
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    println!("  🔍 Conectando a {}...", network.base_url());
+    println!();
+    
+    let observer = EsploraObserver::new(network.clone());
+    
+    match observer.check_connection() {
+        Ok(height) => {
+            println!("  ✅ CONEXIÓN EXITOSA");
+            println!();
+            println!("  Red:            {}", network.name());
+            println!("  API:            {}", network.base_url());
+            println!("  Altura actual:  {} bloques", height);
+            println!();
+            println!("  La conexión a Bitcoin está funcionando correctamente.");
+            println!("  Puedes usar los comandos btc-lock-* para interactuar.");
+            println!();
+            
+            // Mostrar algunos comandos útiles
+            let flag = match network {
+                BitcoinNetwork::Testnet => " --testnet",
+                BitcoinNetwork::Signet => " --signet",
+                BitcoinNetwork::Mainnet => "",
+            };
+            println!("  📌 Comandos disponibles:");
+            println!("     mooncoin btc-lock-query-tx <txid>{}", flag);
+            println!("     mooncoin btc-lock-check-utxo --txid <txid> --vout 0{}", flag);
+            println!();
+        }
+        Err(e) => {
+            println!("  ❌ ERROR DE CONEXIÓN");
+            println!();
+            println!("  No se pudo conectar a Bitcoin {}: {}", network.name(), e);
+            println!();
+            println!("  Posibles causas:");
+            println!("    - Sin conexión a internet");
+            println!("    - API de Blockstream no disponible");
+            println!("    - Firewall bloqueando conexión");
+            println!();
+        }
+    }
+}
+
+fn cmd_btc_lock_query_tx(txid: String, testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - CONSULTAR TRANSACCIÓN [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    if txid.len() != 64 || hex::decode(&txid).is_err() {
+        println!("  ❌ Error: txid inválido (debe ser 64 caracteres hex)");
+        return;
+    }
+    
+    println!("  🔍 Consultando transacción...");
+    println!("  TXID: {}", txid);
+    println!();
+    
+    let observer = if testnet {
+        EsploraObserver::testnet()
+    } else {
+        EsploraObserver::mainnet()
+    };
+    
+    match observer.get_transaction(&txid) {
+        Ok(tx) => {
+            println!("  ✅ TRANSACCIÓN ENCONTRADA");
+            println!();
+            println!("  ═══════════════════════════════════════════════════════════");
+            println!("  📋 DETALLES");
+            println!("  ═══════════════════════════════════════════════════════════");
+            println!();
+            println!("  TXID:           {}", tx.txid);
+            println!("  Versión:        {}", tx.version);
+            println!("  Locktime:       {}", tx.locktime);
+            println!("  Tamaño:         {} bytes", tx.size);
+            println!("  Weight:         {} WU", tx.weight);
+            println!("  Fee:            {} sats", tx.fee);
+            println!();
+            
+            if tx.status.confirmed {
+                println!("  Estado:         ✅ CONFIRMADA");
+                if let Some(height) = tx.status.block_height {
+                    println!("  Bloque:         {}", height);
+                }
+                if let Some(hash) = &tx.status.block_hash {
+                    println!("  Block hash:     {}...", &hash[..16]);
+                }
+            } else {
+                println!("  Estado:         ⏳ EN MEMPOOL (sin confirmar)");
+            }
+            
+            println!();
+            println!("  ─────────────────────────────────────────────────────────────");
+            println!("  INPUTS ({}):", tx.vin.len());
+            println!("  ─────────────────────────────────────────────────────────────");
+            for (i, input) in tx.vin.iter().enumerate() {
+                println!("  [{}] {}:{}", i, &input.txid[..16], input.vout);
+                if let Some(prevout) = &input.prevout {
+                    println!("      Valor: {} sats", prevout.value);
+                }
+            }
+            
+            println!();
+            println!("  ─────────────────────────────────────────────────────────────");
+            println!("  OUTPUTS ({}):", tx.vout.len());
+            println!("  ─────────────────────────────────────────────────────────────");
+            for (i, output) in tx.vout.iter().enumerate() {
+                println!("  [{}] {} sats", i, output.value);
+                if let Some(addr) = &output.scriptpubkey_address {
+                    println!("      Dirección: {}", addr);
+                }
+                if let Some(script_type) = &output.scriptpubkey_type {
+                    println!("      Tipo: {}", script_type);
+                }
+            }
+            println!();
+        }
+        Err(e) => {
+            println!("  ❌ Error consultando transacción: {}", e);
+            println!();
+            println!("  Verifica que:");
+            println!("    - El TXID sea correcto (64 caracteres hex)");
+            println!("    - La transacción exista en {}", network);
+            println!();
+        }
+    }
+}
+
+fn cmd_btc_lock_check_utxo(txid: String, vout: u32, testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - VERIFICAR UTXO [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    if txid.len() != 64 || hex::decode(&txid).is_err() {
+        println!("  ❌ Error: txid inválido (debe ser 64 caracteres hex)");
+        return;
+    }
+    
+    println!("  🔍 Verificando UTXO...");
+    println!("  TXID: {}", txid);
+    println!("  Vout: {}", vout);
+    println!();
+    
+    let observer = if testnet {
+        EsploraObserver::testnet()
+    } else {
+        EsploraObserver::mainnet()
+    };
+    
+    match observer.get_utxo(&txid, vout) {
+        Ok(Some(utxo)) => {
+            println!("  ✅ UTXO ENCONTRADO");
+            println!();
+            println!("  TXID:           {}", utxo.txid);
+            println!("  Vout:           {}", utxo.vout);
+            println!("  Cantidad:       {} sats ({:.8} BTC)", utxo.amount_sats, utxo.amount_sats as f64 / 100_000_000.0);
+            println!("  Confirmaciones: {}", utxo.confirmations);
+            println!();
+            
+            if utxo.spent {
+                println!("  Estado:         ❌ GASTADO");
+                println!();
+                println!("  Este UTXO ya ha sido gastado en otra transacción.");
+            } else {
+                println!("  Estado:         ✅ NO GASTADO (disponible)");
+                println!();
+                println!("  Este UTXO está disponible y puede ser usado.");
+                
+                if utxo.confirmations < 6 {
+                    println!();
+                    println!("  ⚠️  Solo {} confirmaciones (recomendado: 6+)", utxo.confirmations);
+                }
+            }
+            println!();
+        }
+        Ok(None) => {
+            println!("  ❌ UTXO NO ENCONTRADO");
+            println!();
+            println!("  El output {}:{} no existe.", &txid[..16], vout);
+            println!();
+            println!("  Posibles causas:");
+            println!("    - El índice vout es incorrecto");
+            println!("    - La transacción no existe");
+            println!("    - La transacción aún no está confirmada");
+            println!();
+        }
+        Err(e) => {
+            println!("  ❌ Error verificando UTXO: {}", e);
+            println!();
+        }
+    }
+}
+
+fn cmd_btc_lock_keygen(count: u32) {
+    use secp256k1::{Secp256k1, SecretKey, PublicKey};
+    use rand::rngs::OsRng;
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - GENERAR CLAVES DE PRUEBA");
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    println!("  ⚠️  ADVERTENCIA: SOLO PARA TESTNET / PRUEBAS");
+    println!("  Estas claves son para propósitos de prueba únicamente.");
+    println!("  NO uses estas claves para Bitcoin real (mainnet).");
+    println!();
+    
+    let secp = Secp256k1::new();
+    let mut keypairs = Vec::new();
+    
+    let labels = ["hot", "cold", "recovery", "extra1", "extra2"];
+    
+    for i in 0..count.min(5) {
+        let secret_key = SecretKey::new(&mut OsRng);
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+        
+        let privkey_hex = hex::encode(secret_key.secret_bytes());
+        let pubkey_hex = hex::encode(public_key.serialize());
+        
+        keypairs.push((labels[i as usize], privkey_hex, pubkey_hex));
+    }
+    
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  CLAVES GENERADAS ({}):", keypairs.len());
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!();
+    
+    for (label, privkey, pubkey) in &keypairs {
+        println!("  📌 {} key:", label.to_uppercase());
+        println!("     Privkey (hex): {}", privkey);
+        println!("     Pubkey  (hex): {}", pubkey);
+        println!();
+    }
+    
+    // Mostrar comando de ejemplo
+    if keypairs.len() >= 3 {
+        println!("  ═══════════════════════════════════════════════════════════");
+        println!("  📋 COMANDO PARA GENERAR SCRIPT LOCK:");
+        println!("  ═══════════════════════════════════════════════════════════");
+        println!();
+        println!("  mooncoin btc-lock-generate --testnet \\");
+        println!("    --pubkey-hot {} \\", keypairs[0].2);
+        println!("    --pubkey-cold {} \\", keypairs[1].2);
+        println!("    --pubkey-recovery {} \\", keypairs[2].2);
+        println!("    --timelock 5000000");
+        println!();
+        println!("  ─────────────────────────────────────────────────────────────");
+        println!("  💾 GUARDA LAS CLAVES PRIVADAS DE FORMA SEGURA");
+        println!("  ─────────────────────────────────────────────────────────────");
+        println!();
+        println!("  Necesitarás la clave privada de RECOVERY para hacer settlement.");
+        println!("  Sin ella, NO podrás recuperar tu BTC después del timelock.");
+        println!();
+    }
+}
+
+fn cmd_btc_lock_refresh(testnet: bool) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!("  MOONCOIN BTC LOCK - ACTUALIZAR ESTADOS [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════");
+    println!();
+    
+    let registry = LockRegistry::load();
+    let locks = registry.list();
+    
+    if locks.is_empty() {
+        println!("  No hay LOCKs registrados para actualizar.");
+        println!();
+        return;
+    }
+    
+    println!("  🔍 Conectando a Bitcoin {}...", network);
+    
+    let observer = if testnet {
+        EsploraObserver::testnet()
+    } else {
+        EsploraObserver::mainnet()
+    };
+    
+    let current_height = match observer.current_block_height() {
+        Ok(h) => {
+            println!("  Altura actual: {}", h);
+            h
+        }
+        Err(e) => {
+            println!("  ❌ Error conectando: {}", e);
+            return;
+        }
+    };
+    
+    println!();
+    println!("  Actualizando {} LOCKs...", locks.len());
+    println!();
+    
+    let mut updated = 0;
+    let mut errors = 0;
+    
+    for lock in locks {
+        print!("  {} ... ", lock.lock_id);
+        
+        match observer.get_utxo(&lock.btc_txid, lock.btc_vout) {
+            Ok(Some(utxo)) => {
+                let new_state = if utxo.spent {
+                    LockState::Settled
+                } else if current_height >= lock.timelock_block {
+                    LockState::Expired
+                } else {
+                    LockState::Locked
+                };
+                
+                let state_changed = new_state != lock.state;
+                let state_str = match new_state {
+                    LockState::Locked => "🔒 LOCKED",
+                    LockState::Expired => "⏰ EXPIRED",
+                    LockState::Settled => "✅ SETTLED",
+                    LockState::Unknown => "❓ UNKNOWN",
+                };
+                
+                if state_changed {
+                    println!("{} (cambió de {})", state_str, lock.state);
+                    updated += 1;
+                } else {
+                    println!("{}", state_str);
+                }
+            }
+            Ok(None) => {
+                println!("✅ SETTLED (UTXO gastado)");
+                updated += 1;
+            }
+            Err(e) => {
+                println!("❌ Error: {}", e);
+                errors += 1;
+            }
+        }
+    }
+    
+    println!();
+    println!("  ─────────────────────────────────────────────────────────────");
+    println!("  Resumen: {} actualizados, {} errores", updated, errors);
+    println!();
+}
+
+fn cmd_btc_lock_health() {
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    println!("  🌙 MOONCOIN BTC LOCK - VERIFICACIÓN DE SISTEMA");
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    println!();
+    
+    let mut all_ok = true;
+    
+    // 1. Verificar generación de scripts
+    print!("  [1/6] Generación de scripts LOCK.............. ");
+    let params = MultisigCltvParams {
+        pubkey_hot: format!("02{}", "aa".repeat(32)),
+        pubkey_cold: format!("03{}", "bb".repeat(32)),
+        pubkey_recovery: format!("02{}", "cc".repeat(32)),
+        locktime_blocks: 1000,
+    };
+    match generate_multisig_cltv(&params) {
+        Ok(script) => {
+            if script.len() > 50 {
+                println!("✅ OK");
+            } else {
+                println!("❌ FALLO");
+                all_ok = false;
+            }
+        }
+        Err(e) => {
+            println!("❌ FALLO: {}", e);
+            all_ok = false;
+        }
+    }
+    
+    // 2. Verificar template matching
+    print!("  [2/6] Verificación de templates............... ");
+    let test_script = generate_multisig_cltv(&params).unwrap();
+    match match_lock_template(&test_script) {
+        Ok(Some(m)) => {
+            if matches!(m.template, LockTemplate::MultisigCltv) {
+                println!("✅ OK");
+            } else {
+                println!("❌ FALLO");
+                all_ok = false;
+            }
+        }
+        _ => {
+            println!("❌ FALLO");
+            all_ok = false;
+        }
+    }
+    
+    // 3. Verificar generación de direcciones P2WSH
+    print!("  [3/6] Generación de direcciones P2WSH......... ");
+    let p2wsh = script_to_p2wsh_address(&test_script, true);
+    if p2wsh.starts_with("bc1q") && p2wsh.len() > 40 {
+        println!("✅ OK");
+    } else {
+        println!("❌ FALLO");
+        all_ok = false;
+    }
+    
+    // 4. Verificar conexión a Bitcoin Testnet
+    print!("  [4/6] Conexión a Bitcoin Testnet.............. ");
+    let testnet_observer = EsploraObserver::testnet();
+    match testnet_observer.current_block_height() {
+        Ok(height) => {
+            if height > 4000000 {
+                println!("✅ OK (altura: {})", height);
+            } else {
+                println!("⚠️  Altura inesperada: {}", height);
+            }
+        }
+        Err(e) => {
+            println!("❌ FALLO: {}", e);
+            all_ok = false;
+        }
+    }
+    
+    // 5. Verificar conexión a Bitcoin Mainnet
+    print!("  [5/6] Conexión a Bitcoin Mainnet.............. ");
+    let mainnet_observer = EsploraObserver::mainnet();
+    match mainnet_observer.current_block_height() {
+        Ok(height) => {
+            if height > 900000 {
+                println!("✅ OK (altura: {})", height);
+            } else {
+                println!("⚠️  Altura inesperada: {}", height);
+            }
+        }
+        Err(e) => {
+            println!("❌ FALLO: {}", e);
+            all_ok = false;
+        }
+    }
+    
+    // 6. Verificar registro local
+    print!("  [6/6] Registro local de LOCKs................. ");
+    let registry = LockRegistry::load();
+    let lock_count = registry.list().len();
+    println!("✅ OK ({} LOCKs registrados)", lock_count);
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    
+    if all_ok {
+        println!("  ✅ SISTEMA OPERATIVO - Todos los componentes funcionando");
+    } else {
+        println!("  ⚠️  SISTEMA CON PROBLEMAS - Revisa los errores arriba");
+    }
+    
+    println!();
+    println!("  📌 COMANDOS DISPONIBLES:");
+    println!("  ───────────────────────────────────────────────────────────────────────");
+    println!("  btc-lock-templates      Ver templates disponibles");
+    println!("  btc-lock-keygen         Generar claves de prueba (testnet)");
+    println!("  btc-lock-generate       Generar script LOCK");
+    println!("  btc-lock-verify         Verificar script");
+    println!("  btc-lock-register       Registrar LOCK");
+    println!("  btc-lock-status         Ver estado de un LOCK");
+    println!("  btc-lock-list           Listar todos los LOCKs");
+    println!("  btc-lock-refresh        Actualizar estados desde Bitcoin");
+    println!("  btc-lock-settle-check   Verificar si listo para settlement");
+    println!("  btc-lock-settle         Construir TX de settlement");
+    println!("  btc-lock-connect        Probar conexión a Bitcoin");
+    println!("  btc-lock-query-tx       Consultar transacción");
+    println!("  btc-lock-check-utxo     Verificar UTXO");
+    println!("  btc-lock-demo           Demo completo (mock)");
+    println!();
+}
+
+fn cmd_btc_lock_settle(
+    txid: String,
+    vout: u32,
+    destination: String,
+    privkey: String,
+    fee_rate: u64,
+    testnet: bool,
+) {
+    let network = if testnet { "TESTNET" } else { "MAINNET" };
+    
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    println!("  🌙 MOONCOIN BTC LOCK - SETTLEMENT TX BUILDER [{}]", network);
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    
+    // Validar TXID
+    if txid.len() != 64 || hex::decode(&txid).is_err() {
+        println!("\n  ❌ Error: TXID inválido (debe ser 64 caracteres hex)");
+        return;
+    }
+    
+    // Validar privkey
+    if privkey.len() != 64 || hex::decode(&privkey).is_err() {
+        println!("\n  ❌ Error: Private key inválida (debe ser 64 caracteres hex)");
+        return;
+    }
+    
+    // Validar dirección destino
+    let expected_prefix = if testnet { "tb1" } else { "bc1" };
+    if !destination.starts_with(expected_prefix) {
+        println!("\n  ❌ Error: Dirección debe empezar con {}", expected_prefix);
+        return;
+    }
+    
+    // Buscar el LOCK en el registro
+    let registry = LockRegistry::load();
+    let lock = match registry.find_by_utxo(&txid, vout) {
+        Some(l) => l,
+        None => {
+            println!("\n  ❌ Error: LOCK no encontrado en registro local");
+            println!("     Primero debes registrar el LOCK con btc-lock-register");
+            return;
+        }
+    };
+    
+    println!();
+    println!("  📋 LOCK ENCONTRADO:");
+    println!("  ─────────────────────────────────────────────────────────────────────────");
+    println!("  Lock ID:       {}", lock.lock_id);
+    println!("  TXID:          {}...", &lock.btc_txid[..16]);
+    println!("  Timelock:      Bloque {}", lock.timelock_block);
+    
+    // Consultar estado actual en Bitcoin
+    println!();
+    println!("  🔍 Consultando Bitcoin {}...", network);
+    
+    let observer = if testnet {
+        EsploraObserver::testnet()
+    } else {
+        EsploraObserver::mainnet()
+    };
+    
+    // Obtener altura actual
+    let current_height = match observer.current_block_height() {
+        Ok(h) => h,
+        Err(e) => {
+            println!("  ❌ Error conectando a Bitcoin: {}", e);
+            return;
+        }
+    };
+    
+    println!("  Altura actual: {}", current_height);
+    
+    // Verificar que el timelock haya expirado
+    if current_height < lock.timelock_block {
+        let blocks_remaining = lock.timelock_block - current_height;
+        println!();
+        println!("  ❌ ERROR: TIMELOCK AÚN NO HA EXPIRADO");
+        println!();
+        println!("  Bloque actual:     {}", current_height);
+        println!("  Bloque timelock:   {}", lock.timelock_block);
+        println!("  Bloques restantes: {}", blocks_remaining);
+        println!("  Tiempo estimado:   {}", estimate_time_remaining(blocks_remaining as i32));
+        println!();
+        println!("  Debes esperar hasta el bloque {} para hacer settlement.", lock.timelock_block);
+        return;
+    }
+    
+    println!("  Timelock:      ✅ EXPIRADO (bloque {} >= {})", current_height, lock.timelock_block);
+    
+    // Verificar UTXO
+    let utxo = match observer.get_utxo(&txid, vout) {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            println!();
+            println!("  ❌ ERROR: UTXO no encontrado");
+            println!("     El UTXO puede haber sido gastado ya.");
+            return;
+        }
+        Err(e) => {
+            println!("  ❌ Error consultando UTXO: {}", e);
+            return;
+        }
+    };
+    
+    if utxo.spent {
+        println!();
+        println!("  ❌ ERROR: UTXO YA FUE GASTADO");
+        println!("     El settlement ya fue realizado o los fondos fueron movidos.");
+        return;
+    }
+    
+    let input_amount = lock.amount_sats.unwrap_or(utxo.amount_sats);
+    let estimated_fee = estimate_settlement_fee(fee_rate);
+    let output_amount = input_amount.saturating_sub(estimated_fee);
+    
+    println!("  UTXO:          ✅ Disponible ({} sats)", input_amount);
+    
+    // Mostrar resumen
+    println!();
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    println!("  📋 RESUMEN DE TRANSACCIÓN");
+    println!("  ═══════════════════════════════════════════════════════════════════════");
+    println!();
+    println!("  Input:         {}:{}", &txid[..16], vout);
+    println!("  Cantidad:      {} sats ({:.8} BTC)", input_amount, input_amount as f64 / 100_000_000.0);
+    println!("  Fee rate:      {} sat/vbyte", fee_rate);
+    println!("  Fee estimado:  {} sats", estimated_fee);
+    println!("  Output:        {} sats ({:.8} BTC)", output_amount, output_amount as f64 / 100_000_000.0);
+    println!("  Destino:       {}", destination);
+    println!();
+    
+    // Advertencia
+    println!("{}", WARNING_SETTLEMENT);
+    
+    if !confirm_btc_lock("  ¿Generar transacción de settlement?") {
+        println!("\n  ❌ Operación cancelada por el usuario.");
+        return;
+    }
+    
+    // Construir la transacción
+    println!();
+    println!("  🔧 Construyendo transacción...");
+    
+    let params = SettlementParams {
+        input_txid: txid.clone(),
+        input_vout: vout,
+        input_amount,
+        redeem_script_hex: lock.redeem_script_hex.clone(),
+        recovery_privkey_hex: privkey,
+        destination_address: destination.clone(),
+        fee_rate,
+        locktime: lock.timelock_block,
+        testnet,
+    };
+    
+    match build_settlement_tx(&params) {
+        Ok(settlement) => {
+            println!();
+            println!("  ═══════════════════════════════════════════════════════════════════════");
+            println!("  ✅ TRANSACCIÓN GENERADA EXITOSAMENTE");
+            println!("  ═══════════════════════════════════════════════════════════════════════");
+            println!();
+            println!("  TXID:          {}", settlement.txid);
+            println!("  Fee:           {} sats", settlement.fee_sats);
+            println!("  Output:        {} sats", settlement.output_sats);
+            println!();
+            println!("  ─────────────────────────────────────────────────────────────────────────");
+            println!("  📋 TRANSACCIÓN HEX (para broadcast):");
+            println!("  ─────────────────────────────────────────────────────────────────────────");
+            println!();
+            println!("  {}", settlement.tx_hex);
+            println!();
+            println!("  ═══════════════════════════════════════════════════════════════════════");
+            println!("  📌 PRÓXIMOS PASOS");
+            println!("  ═══════════════════════════════════════════════════════════════════════");
+            println!();
+            println!("  1. Copia la transacción hex de arriba");
+            println!();
+            println!("  2. Broadcast usando uno de estos métodos:");
+            println!();
+            if testnet {
+                println!("     Web:  https://blockstream.info/testnet/tx/push");
+                println!("     API:  curl -X POST -d '{}' https://blockstream.info/testnet/api/tx", &settlement.tx_hex[..40]);
+            } else {
+                println!("     Web:  https://blockstream.info/tx/push");
+                println!("     API:  curl -X POST -d '{}' https://blockstream.info/api/tx", &settlement.tx_hex[..40]);
+            }
+            println!();
+            println!("  3. Verifica que la transacción sea incluida en un bloque");
+            println!();
+            println!("  ⚠️  Una vez transmitida, NO puede ser revertida.");
+            println!();
+        }
+        Err(e) => {
+            println!();
+            println!("  ❌ ERROR CONSTRUYENDO TRANSACCIÓN: {}", e);
+            println!();
+            println!("  Posibles causas:");
+            println!("    - Clave privada incorrecta");
+            println!("    - Dirección destino inválida");
+            println!("    - Fondos insuficientes para pagar fee");
+            println!();
+        }
+    }
 }
