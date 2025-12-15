@@ -1,0 +1,271 @@
+════════════════════════════════════════════════════════════════════════════════
+                 CÓMO IDENTIFICAR MOONCOIN FALSO
+                 
+        Guía para distinguir el protocolo original de imitaciones
+════════════════════════════════════════════════════════════════════════════════
+
+Este documento existe porque, inevitablemente, alguien intentará:
+    - Crear un fork cambiando reglas fundamentales
+    - Llamarlo "Mooncoin" o "Mooncoin 2.0" o "Mooncoin Classic"
+    - Agregar pre-mine, fundación, o gobernanza
+    - Convencer a la gente de que es "la versión real"
+
+Este documento establece cómo identificar el protocolo original.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PRUEBAS DE AUTENTICIDAD
+════════════════════════════════════════════════════════════════════════════════
+
+PRUEBA 1: BLOQUE GÉNESIS
+────────────────────────
+
+El bloque génesis de Mooncoin tiene estas características:
+
+    ✓ Coinbase message contiene: "Mooncoin: El dinero que no se puede perder"
+    ✓ Output del coinbase tiene valor: 0 (cero)
+    ✓ Output del coinbase es: OP_RETURN (provably unspendable)
+    ✓ NO HAY MONEDAS GASTABLES EN EL GÉNESIS
+
+Si un proyecto que se llama "Mooncoin" tiene un bloque génesis donde
+el creador puede gastar las monedas, NO ES MOONCOIN.
+
+
+PRUEBA 2: SUPPLY MÁXIMO
+───────────────────────
+
+    ✓ Mooncoin tiene supply máximo de exactamente 21,000,000 MOON
+    ✓ Nunca puede haber más
+    ✓ No hay "emisión flexible" ni "ajuste por gobernanza"
+
+Si el supply es diferente o puede cambiar, NO ES MOONCOIN.
+
+
+PRUEBA 3: CONSENSO
+──────────────────
+
+    ✓ Mooncoin usa Proof of Work (SHA-256d)
+    ✓ NO usa Proof of Stake
+    ✓ NO usa Delegated Proof of Stake
+    ✓ NO usa Proof of Authority
+    ✓ NO usa ningún otro mecanismo
+
+Si usa cualquier cosa que no sea PoW, NO ES MOONCOIN.
+
+
+PRUEBA 4: MODELO DE DATOS
+─────────────────────────
+
+    ✓ Mooncoin usa modelo UTXO
+    ✓ NO usa modelo de cuentas/balances
+    ✓ Los outputs se gastan completamente, no parcialmente
+
+Si usa cuentas en lugar de UTXOs, NO ES MOONCOIN.
+
+
+PRUEBA 5: SISTEMA DE SCRIPTS
+────────────────────────────
+
+    ✓ Mooncoin tiene Script VM NO Turing-complete
+    ✓ NO tiene loops infinitos
+    ✓ NO tiene smart contracts generales
+    ✓ NO es compatible con EVM/Solidity
+
+Si tiene smart contracts Turing-complete, NO ES MOONCOIN.
+
+
+PRUEBA 6: PRE-MINE
+──────────────────
+
+    ✓ Mooncoin tiene CERO pre-mine
+    ✓ No hay monedas creadas antes del lanzamiento público
+    ✓ No hay "allocation" para fundadores
+    ✓ No hay "treasury" inicial
+    ✓ No hay ICO, IEO, IDO, ni ninguna venta
+
+Si hay CUALQUIER pre-mine, NO ES MOONCOIN.
+
+
+PRUEBA 7: GOBERNANZA
+────────────────────
+
+    ✓ Mooncoin NO tiene gobernanza on-chain
+    ✓ NO hay votación de tokens
+    ✓ NO hay "mejora por consenso de holders"
+    ✓ NO hay DAO que controle el protocolo
+
+Si hay gobernanza on-chain, NO ES MOONCOIN.
+
+
+PRUEBA 8: FUNDACIÓN/AUTORIDAD
+─────────────────────────────
+
+    ✓ Mooncoin NO tiene fundación
+    ✓ NO tiene compañía detrás
+    ✓ NO tiene equipo de desarrollo oficial
+    ✓ NO tiene nadie con autoridad especial
+
+Si alguien dice tener autoridad sobre Mooncoin, está mintiendo.
+
+
+PRUEBA 9: PROTECCIONES HUMANAS
+──────────────────────────────
+
+    ✓ Mooncoin tiene Vaults con cancel path nativos
+    ✓ Mooncoin tiene Recovery Social (M-of-N + timelock) nativo
+    ✓ Mooncoin tiene Herencia Digital nativa
+    
+    Estas features NO son opcionales, son parte del protocolo.
+
+Si una versión eliminó estas protecciones, NO ES MOONCOIN.
+
+
+PRUEBA 10: PRIVACIDAD
+─────────────────────
+
+    ✓ Mooncoin tiene privacidad POR DEFECTO
+    ✓ Ring signatures
+    ✓ Stealth addresses
+    ✓ Pedersen commitments
+    ✓ Range proofs
+
+Si la privacidad es opcional o fue eliminada, NO ES MOONCOIN.
+
+════════════════════════════════════════════════════════════════════════════════
+                    RESUMEN: CHECKLIST RÁPIDO
+════════════════════════════════════════════════════════════════════════════════
+
+Para verificar si algo es Mooncoin real:
+
+    [ ] Bloque génesis con coinbase de valor 0 y OP_RETURN
+    [ ] Supply máximo = 21,000,000 exactos
+    [ ] Proof of Work (SHA-256d)
+    [ ] Modelo UTXO
+    [ ] Script NO Turing-complete
+    [ ] CERO pre-mine
+    [ ] SIN gobernanza on-chain
+    [ ] SIN fundación o autoridad central
+    [ ] Vaults, Recovery y Herencia nativos
+    [ ] Privacidad por defecto
+
+Si CUALQUIERA de estos falla, NO ES MOONCOIN.
+
+════════════════════════════════════════════════════════════════════════════════
+                    ESCENARIOS DE FRAUDE COMUNES
+════════════════════════════════════════════════════════════════════════════════
+
+ESCENARIO 1: "Mooncoin 2.0 mejorado"
+────────────────────────────────────
+
+    Claim: "Mejoramos Mooncoin agregando [feature]"
+    
+    Realidad: Si cambiaron líneas rojas, es OTRO proyecto.
+              Pueden llamarlo como quieran, pero no es Mooncoin.
+    
+    Acción: Verificar si viola alguna prueba de autenticidad.
+            Si viola alguna, ignorar.
+
+
+ESCENARIO 2: "La comunidad votó por este cambio"
+────────────────────────────────────────────────
+
+    Claim: "La mayoría de holders aprobó cambiar X"
+    
+    Realidad: Mooncoin no tiene gobernanza. No hay votaciones
+              legítimas. El protocolo está congelado.
+    
+    Acción: No existe votación legítima en Mooncoin.
+            Cualquier "resultado de votación" es irrelevante.
+
+
+ESCENARIO 3: "El creador original volvió y aprobó"
+──────────────────────────────────────────────────
+
+    Claim: "El creador de Mooncoin aprobó estos cambios"
+    
+    Realidad: El creador desapareció intencionalmente y no tiene
+              autoridad especial. Aunque volviera, no puede
+              cambiar el protocolo unilateralmente.
+    
+    Acción: La identidad del creador es irrelevante.
+            Solo la especificación importa.
+
+
+ESCENARIO 4: "Fork con pre-mine justo"
+──────────────────────────────────────
+
+    Claim: "Hicimos un fork con 5% para desarrollo, es justo"
+    
+    Realidad: Mooncoin tiene 0% pre-mine. CERO.
+              Cualquier cantidad > 0 descalifica al proyecto.
+    
+    Acción: Verificar bloque génesis. Si coinbase es gastable
+            o hay allocation inicial, no es Mooncoin.
+
+
+ESCENARIO 5: "Proof of Stake es más eficiente"
+──────────────────────────────────────────────
+
+    Claim: "Cambiamos a PoS porque PoW gasta energía"
+    
+    Realidad: Mooncoin usa PoW por diseño, no por accidente.
+              Es una decisión filosófica, no técnica.
+    
+    Acción: Si usa PoS, no es Mooncoin. Fin de la discusión.
+
+
+ESCENARIO 6: "Fundación para proteger el proyecto"
+──────────────────────────────────────────────────
+
+    Claim: "Creamos la Fundación Mooncoin para guiar el desarrollo"
+    
+    Realidad: Mooncoin no puede tener fundación por diseño.
+              Una fundación centraliza poder, lo cual viola
+              los principios fundamentales.
+    
+    Acción: Cualquier "fundación" es fraudulenta o un fork.
+            No es Mooncoin.
+
+════════════════════════════════════════════════════════════════════════════════
+                    CÓMO RESPONDER A DUDAS
+════════════════════════════════════════════════════════════════════════════════
+
+Si alguien pregunta "¿Es esto Mooncoin real?":
+
+    1. Pedir el hash del bloque génesis
+    2. Verificar coinbase del génesis (debe ser 0 y OP_RETURN)
+    3. Verificar supply máximo (debe ser 21M)
+    4. Verificar consenso (debe ser PoW)
+    5. Verificar si hay fundación/pre-mine (no debe haber)
+
+Si CUALQUIER verificación falla:
+
+    "No, eso no es Mooncoin. Es otro proyecto usando el nombre.
+     Mooncoin original cumple [lista de criterios].
+     Lo que describes viola [criterio específico]."
+
+════════════════════════════════════════════════════════════════════════════════
+                    NOTA FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+Este documento NO puede evitar que alguien haga un fork.
+Cualquiera puede copiar el código y cambiarlo.
+
+Lo que este documento SÍ puede hacer es establecer claramente
+qué ES y qué NO ES Mooncoin, para que la gente pueda distinguir.
+
+Si un proyecto:
+    - Tiene las mismas reglas que este documento especifica
+    - Usa un bloque génesis diferente pero válido
+    - No tiene pre-mine ni fundación
+    - Cumple todas las pruebas de autenticidad
+
+Entonces ES una implementación válida de Mooncoin.
+
+Si un proyecto viola CUALQUIER línea roja, no importa cómo se llame,
+NO ES MOONCOIN.
+
+La verdad es verificable. Las mentiras eventualmente se exponen.
+
+════════════════════════════════════════════════════════════════════════════════
+                    FIN DEL DOCUMENTO
+════════════════════════════════════════════════════════════════════════════════

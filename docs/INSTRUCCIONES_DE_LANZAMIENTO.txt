@@ -1,0 +1,344 @@
+════════════════════════════════════════════════════════════════════════════════
+                    INSTRUCCIONES DE LANZAMIENTO
+                    
+         Cómo ir de "código en GitHub" a "red funcionando"
+════════════════════════════════════════════════════════════════════════════════
+
+Este documento te guía paso a paso para lanzar Mooncoin como red real.
+Sigue cada paso en orden. No te saltes nada.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 0: REQUISITOS PREVIOS
+════════════════════════════════════════════════════════════════════════════════
+
+Necesitas:
+    [✓] Rust instalado (rustup.rs)
+    [✓] Git instalado
+    [✓] Conexión a internet estable
+    [✓] VPS o servidor que pueda correr 24/7 (opcional pero recomendado)
+
+Verifica Rust:
+    $ rustc --version
+    $ cargo --version
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 1: PREPARAR EL CÓDIGO
+════════════════════════════════════════════════════════════════════════════════
+
+1.1 Agregar dependencias al Cargo.toml:
+
+    [dependencies]
+    # Existentes...
+    sha2 = "0.10"
+    hex = "0.4"
+    serde = { version = "1.0", features = ["derive"] }
+    bincode = "1.3"
+    dirs = "5.0"
+
+1.2 Copiar los archivos del nodo:
+
+    $ cp genesis_generator.rs src/genesis.rs
+    $ cp node_minimal.rs src/node.rs
+
+1.3 Actualizar src/main.rs:
+
+    mod genesis;
+    mod node;
+    
+    // ... resto del código ...
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 2: GENERAR TU DIRECCIÓN DE MINERO
+════════════════════════════════════════════════════════════════════════════════
+
+Antes de minar, necesitas una dirección donde recibir las recompensas.
+
+2.1 Usando el wallet existente de Mooncoin:
+
+    use mooncoin::wallet::Wallet;
+    
+    fn main() {
+        let wallet = Wallet::new();
+        let address = wallet.get_address();
+        
+        println!("Tu dirección de minero: {}", address);
+        println!("GUARDA TU CLAVE PRIVADA EN LUGAR SEGURO");
+        println!("Private key: {}", hex::encode(wallet.get_private_key()));
+    }
+
+2.2 O crear una simple (P2PKH):
+
+    // Script pubkey para P2PKH
+    let pubkey_hash = tu_pubkey_hash; // 20 bytes
+    let script = vec![
+        0x76,       // OP_DUP
+        0xa9,       // OP_HASH160
+        0x14,       // Push 20 bytes
+        // ... pubkey_hash (20 bytes) ...
+        0x88,       // OP_EQUALVERIFY
+        0xac,       // OP_CHECKSIG
+    ];
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 3: GENERAR BLOQUE GÉNESIS
+════════════════════════════════════════════════════════════════════════════════
+
+Este es el momento más importante. Una vez generado, el génesis define tu red.
+
+3.1 Ejecutar el generador:
+
+    $ cargo run --release --bin genesis
+
+    O desde código:
+    
+    use mooncoin::genesis::{generate_genesis_now, print_genesis_info, serialize_genesis_for_code};
+    
+    fn main() {
+        let genesis = generate_genesis_now();
+        print_genesis_info(&genesis);
+        println!("{}", serialize_genesis_for_code(&genesis));
+    }
+
+3.2 El proceso tomará unos minutos (buscando nonce válido).
+
+3.3 Cuando termine, verás algo así:
+
+    ╔════════════════════════════════════════════════════════════════╗
+    ║                  BLOQUE GÉNESIS DE MOONCOIN                     ║
+    ╠════════════════════════════════════════════════════════════════╣
+    ║ Timestamp:    1702500000 (~2024)                               ║
+    ║ Nonce:        123456789                                        ║
+    ╠════════════════════════════════════════════════════════════════╣
+    ║ Block Hash:   00000000a1b2c3d4...                              ║
+    ╠════════════════════════════════════════════════════════════════╣
+    ║ COINBASE:                                                      ║
+    ║   Value:   0 MOON (NO HAY PRE-MINE)                           ║
+    ╚════════════════════════════════════════════════════════════════╝
+
+3.4 GUARDA ESTOS VALORES. Son tu bloque génesis.
+
+3.5 Hardcodea el génesis en src/genesis.rs:
+
+    pub const GENESIS_BLOCK_HASH: [u8; 32] = [ /* ... */ ];
+    pub const GENESIS_TIMESTAMP: u32 = /* ... */;
+    pub const GENESIS_NONCE: u32 = /* ... */;
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 4: INICIAR EL PRIMER NODO
+════════════════════════════════════════════════════════════════════════════════
+
+4.1 Compilar en modo release:
+
+    $ cargo build --release
+
+4.2 Iniciar el nodo:
+
+    $ ./target/release/mooncoin start
+
+    Deberías ver:
+    > Servidor P2P escuchando en puerto 8333
+    > Cargados 0 bloques
+
+4.3 En otra terminal, iniciar minería:
+
+    $ ./target/release/mooncoin mine
+
+    Deberías ver:
+    > Minando bloque...
+    > ✓ Bloque 0 minado! Hash: 00000000...
+    > Minando bloque...
+    > ✓ Bloque 1 minado! Hash: 00000001...
+
+4.4 Verificar estado:
+
+    $ ./target/release/mooncoin status
+
+    > Altura: 5
+    > UTXOs: 5
+    > Peers: 0
+    > Minando: true
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 5: MINAR LOS PRIMEROS 100-1000 BLOQUES
+════════════════════════════════════════════════════════════════════════════════
+
+Deja el nodo minando por varias horas o días.
+
+Objetivo: ~100-1000 bloques antes de publicar.
+
+Por qué:
+    - Demuestra que la red funciona
+    - Crea historia de bloques
+    - Da tiempo para encontrar bugs
+
+Monitorea:
+    $ watch -n 10 './target/release/mooncoin status'
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 6: PUBLICAR EL CÓDIGO
+════════════════════════════════════════════════════════════════════════════════
+
+Una vez que tengas bloques minados y todo funcione:
+
+6.1 Actualizar README con:
+    - Hash del bloque génesis
+    - Parámetros de red
+    - Instrucciones para correr nodo
+
+6.2 Commit y push:
+
+    $ git add .
+    $ git commit -m "v3.0 - Lanzamiento de red"
+    $ git tag v3.0
+    $ git push origin main --tags
+
+6.3 Subir a archive.org:
+
+    $ zip -r mooncoin-v3.0.zip .
+    # Ir a archive.org y subir el zip
+
+6.4 Subir a IPFS:
+
+    $ ipfs add -r .
+    # Guardar el CID resultante
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 7: ANUNCIAR (SILENCIOSAMENTE)
+════════════════════════════════════════════════════════════════════════════════
+
+NO hagas marketing. NO busques hype.
+
+Opciones de bajo perfil:
+    - Post en Lobste.rs
+    - Post en Hacker News (con cuidado)
+    - Email a personas específicas que podrían interesarse
+    - Post en r/crypto (criptografía, NO criptomonedas)
+
+El post debería ser técnico, honesto:
+
+    "Mooncoin: Un sistema de dinero electrónico con protección humana
+    
+    Problema que resuelve:
+    - Pérdida de fondos por muerte (~4M BTC perdidos)
+    - Pérdida por robo de clave
+    - Pérdida por olvido de seed
+    
+    Solución:
+    - Herencia digital automática
+    - Vaults con cancelación
+    - Recovery social
+    
+    Complementa a Bitcoin, no compite.
+    Sin pre-mine. Sin fundación. Sin ICO.
+    
+    Código: [link]
+    Especificación: [link]"
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 8: MANTENER POR 6 MESES MÍNIMO
+════════════════════════════════════════════════════════════════════════════════
+
+Satoshi mantuvo Bitcoin ~2 años antes de desaparecer.
+Mínimo, mantén Mooncoin por 6 meses.
+
+Durante este tiempo:
+    [ ] Correr nodo 24/7
+    [ ] Responder preguntas técnicas
+    [ ] Arreglar bugs críticos
+    [ ] Documentar problemas encontrados
+    [ ] NO agregar features
+    [ ] NO hacer marketing
+
+════════════════════════════════════════════════════════════════════════════════
+                    PASO 9: PREPARAR DESAPARICIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+Cuando decidas irte:
+
+9.1 Verificar que existe al menos 1 otro nodo independiente
+
+9.2 Documentar todo lo pendiente en issues de GitHub
+
+9.3 Hacer commit final con mensaje:
+
+    "Final commit from original creator.
+     The protocol is complete. 
+     Do not add features.
+     See GUIA_DE_SUPERVIVENCIA.txt"
+
+9.4 Dejar nodo corriendo (si es posible) por 6+ meses más
+
+9.5 No anunciar que te vas. Simplemente deja de responder.
+
+════════════════════════════════════════════════════════════════════════════════
+                    CHECKLIST FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+Antes de considerar que "terminaste":
+
+    [ ] Bloque génesis generado
+    [ ] 100+ bloques minados
+    [ ] Nodo corre 24/7
+    [ ] Código en GitHub
+    [ ] Código en archive.org
+    [ ] Código en IPFS (con CID publicado)
+    [ ] Especificación completa incluida
+    [ ] Guía de supervivencia incluida
+    [ ] "Cómo identificar falso" incluido
+    [ ] Al menos 1 post técnico publicado
+    [ ] Al menos 1 otra persona tiene copia del código
+    
+Opcional pero recomendado:
+    [ ] VPS pagado por 1 año corriendo nodo
+    [ ] 2-3 personas que entienden el código
+    [ ] Torrent del código sembrado
+
+════════════════════════════════════════════════════════════════════════════════
+                    SI ALGO SALE MAL
+════════════════════════════════════════════════════════════════════════════════
+
+BUG CRÍTICO ENCONTRADO:
+    1. Arreglar con parche mínimo
+    2. Documentar exactamente qué cambió
+    3. Incrementar versión
+    4. Seguir adelante
+
+NADIE SE UNE:
+    1. Seguir corriendo tu nodo solo
+    2. Bitcoin tuvo ~10 nodos después de 6 meses
+    3. La paciencia es parte del proceso
+
+TE ATACAN SOCIALMENTE:
+    1. Ignorar
+    2. El código habla por sí mismo
+    3. Los trolls se aburren eventualmente
+
+ALGUIEN HACE FORK MALICIOSO:
+    1. Publicar comparación clara
+    2. Apuntar al documento "Cómo identificar falso"
+    3. No entrar en guerras
+    4. La verdad es verificable
+
+════════════════════════════════════════════════════════════════════════════════
+                    MENSAJE FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+Satoshi lanzó Bitcoin solo.
+Mantuvo la red viva solo por meses.
+Respondió emails por 2 años.
+Luego desapareció.
+
+Bitcoin sobrevivió.
+
+No porque Satoshi fuera especial.
+Porque el código funcionaba y estaba bien documentado.
+
+Tu trabajo no es ser importante.
+Tu trabajo es hacer que Mooncoin no te necesite.
+
+Cuando puedas irte y Mooncoin siga funcionando...
+habrás terminado.
+
+════════════════════════════════════════════════════════════════════════════════
+                    FIN DE LAS INSTRUCCIONES
+════════════════════════════════════════════════════════════════════════════════

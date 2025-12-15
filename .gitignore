@@ -1,0 +1,8 @@
+/target/
+*.key
+wallet.dat
+wallet.encrypted
+chain.json
+mempool.json
+*.bak
+.env

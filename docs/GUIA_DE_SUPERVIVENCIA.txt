@@ -1,0 +1,439 @@
+════════════════════════════════════════════════════════════════════════════════
+                    GUÍA DE SUPERVIVENCIA DE MOONCOIN
+                    
+              Cómo Lanzar, Mantener y Proteger el Protocolo
+════════════════════════════════════════════════════════════════════════════════
+
+Esta guía documenta exactamente lo que se necesita para que Mooncoin 
+sobreviva como Bitcoin sobrevivió: empezando pequeño, con paciencia,
+sin buscar hype.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE I: LECCIONES DE BITCOIN
+════════════════════════════════════════════════════════════════════════════════
+
+CRONOLOGÍA DE BITCOIN (para entender el camino):
+
+    3 enero 2009:   Satoshi mina bloque génesis. SOLO.
+    9 enero 2009:   Publica código en lista de criptógrafos.
+    12 enero 2009:  Hal Finney es la segunda persona en correr un nodo.
+    6 meses:        ~10-20 nodos en el mundo.
+    1 año:          ~50-100 nodos. Precio: $0.001
+    2 años:         Satoshi desaparece. ~100-200 nodos. Precio: $0.30
+    4 años:         Primer halving. Precio: $12
+    10 años:        Miles de nodos. Precio: $10,000+
+
+LECCIONES CLAVE:
+
+    1. SATOSHI MINÓ SOLO POR MESES
+       No esperó a que otros se unieran. Mantuvo la red viva él solo.
+       
+    2. NO HIZO MARKETING
+       Publicó en una lista técnica, no en redes sociales.
+       
+    3. FUE PACIENTE
+       Bitcoin tardó 2 años en valer $1.
+       
+    4. DOCUMENTÓ TODO
+       El whitepaper, los emails, el código comentado.
+       
+    5. RESPONDIÓ PREGUNTAS
+       Se quedó 2 años antes de desaparecer.
+       
+    6. EL CÓDIGO FUNCIONABA
+       No era teoría. Podías descargarlo y correrlo.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE II: ESTADO ACTUAL DE MOONCOIN
+════════════════════════════════════════════════════════════════════════════════
+
+COMPONENTES QUE EXISTEN (Biblioteca):
+
+    ✅ Estructuras de blockchain (bloques, TXs, UTXOs)
+    ✅ Sistema de scripts con 50+ opcodes
+    ✅ Validación completa de TXs y bloques
+    ✅ Privacidad (Ring sigs, Stealth, Pedersen)
+    ✅ Vaults con cancel path
+    ✅ Recovery social (M-of-N + timelock)
+    ✅ Herencia digital (check-in + distribución)
+    ✅ Atomic swaps
+    ✅ 297 tests pasando
+    ✅ Especificación del protocolo
+
+COMPONENTES QUE FALTAN (Aplicación):
+
+    ❌ CLI para correr nodo
+    ❌ Networking P2P
+    ❌ Base de datos persistente
+    ❌ Minero funcional
+    ❌ RPC/API para wallets
+    ❌ Sincronización de blockchain
+    ❌ Mempool persistente
+    ❌ Wallet CLI
+
+TRADUCCIÓN: Mooncoin tiene el "motor" pero no el "auto".
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE III: RUTA MÍNIMA PARA LANZAR
+════════════════════════════════════════════════════════════════════════════════
+
+OPCIÓN A: COMPLETAR EL NODO (Recomendado si tienes tiempo)
+─────────────────────────────────────────────────────────
+
+Tiempo estimado: 2-4 semanas de trabajo enfocado
+
+Paso 1: Base de datos de bloques
+    - LevelDB o RocksDB para almacenar bloques
+    - Índice de UTXOs
+    - ~500-1000 líneas de código
+
+Paso 2: Networking P2P básico
+    - TCP connections
+    - Protocolo de mensajes (version, getblocks, block, tx)
+    - Descubrimiento de peers (hardcoded seeds al inicio)
+    - ~1500-2000 líneas de código
+
+Paso 3: Minero básico
+    - Loop de PoW
+    - Creación de bloque candidato
+    - Ajuste de dificultad
+    - ~300-500 líneas de código
+
+Paso 4: CLI mínimo
+    - mooncoin-node start
+    - mooncoin-node mine
+    - mooncoin-node status
+    - ~500-800 líneas de código
+
+Paso 5: Wallet CLI
+    - Generar claves
+    - Ver balance
+    - Enviar TX
+    - ~800-1000 líneas de código
+
+TOTAL ADICIONAL: ~4000-5000 líneas para un nodo mínimo funcional.
+
+
+OPCIÓN B: PUBLICAR COMO ESTÁ (Si necesitas irte pronto)
+───────────────────────────────────────────────────────
+
+El código actual es una biblioteca que OTRO DESARROLLADOR puede usar
+para construir un nodo. Satoshi también necesitó colaboradores.
+
+Documentar claramente:
+    "Este es el protocolo completo. 
+     La capa de aplicación (nodo, wallet) queda por construir.
+     Aquí están las especificaciones para hacerlo."
+
+Publicar en:
+    - GitHub (obvio)
+    - Archive.org (permanente)
+    - IPFS (descentralizado)
+    - Múltiples forks en diferentes cuentas
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE IV: CÓMO GENERAR BLOQUE GÉNESIS
+════════════════════════════════════════════════════════════════════════════════
+
+Cuando estés listo para lanzar la red, el bloque génesis debe crearse así:
+
+DATOS DEL BLOQUE GÉNESIS:
+
+    version:        1
+    prev_hash:      0x0000000000000000000000000000000000000000000000000000000000000000
+    merkle_root:    [hash de TX coinbase]
+    timestamp:      [momento del lanzamiento - UNIX timestamp]
+    bits:           0x1d00ffff (dificultad mínima)
+    nonce:          [calcular para que hash < target]
+
+TX COINBASE DEL GÉNESIS:
+
+    inputs:
+        prev_txid:  0x00...00 (32 ceros)
+        prev_vout:  0xFFFFFFFF
+        script_sig: "Mooncoin: El dinero que no se puede perder. [fecha/headline]"
+    
+    outputs:
+        value:      0 (cero - nadie puede gastar las monedas del génesis)
+        script:     OP_RETURN (provably unspendable)
+
+IMPORTANTE: Las monedas del génesis NO SON GASTABLES.
+            Esto demuestra que no hay pre-mine.
+
+CÓDIGO PARA GENERAR (pseudocódigo):
+
+    fn create_genesis() -> Block {
+        let coinbase_msg = b"Mooncoin: El dinero que no se puede perder";
+        let timestamp = current_unix_timestamp();
+        
+        let coinbase_tx = Transaction {
+            version: 1,
+            inputs: vec![Input {
+                prev_txid: [0u8; 32],
+                prev_vout: 0xFFFFFFFF,
+                script_sig: coinbase_msg.to_vec(),
+                sequence: 0xFFFFFFFF,
+            }],
+            outputs: vec![Output {
+                value: 0,  // NO GASTABLE
+                script_pubkey: vec![OP_RETURN],
+            }],
+            locktime: 0,
+        };
+        
+        let merkle_root = merkle_root(&[coinbase_tx.txid()]);
+        
+        let mut header = BlockHeader {
+            version: 1,
+            prev_block_hash: [0u8; 32],
+            merkle_root,
+            timestamp,
+            bits: 0x1d00ffff,
+            nonce: 0,
+        };
+        
+        // Minar hasta encontrar hash válido
+        loop {
+            let hash = sha256d(header.serialize());
+            if hash_to_u256(hash) < bits_to_target(header.bits) {
+                break;
+            }
+            header.nonce += 1;
+        }
+        
+        Block { header, transactions: vec![coinbase_tx] }
+    }
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE V: PRIMEROS 6 MESES (PLAN DE SATOSHI)
+════════════════════════════════════════════════════════════════════════════════
+
+SEMANA 1-2: Lanzamiento silencioso
+─────────────────────────────────
+
+    - Generar bloque génesis
+    - Correr nodo tú solo
+    - Minar primeros 100-1000 bloques
+    - NO anunciar públicamente todavía
+    - Verificar que todo funciona
+
+SEMANA 3-4: Publicación técnica
+──────────────────────────────
+
+    - Publicar código en GitHub
+    - Publicar en 1-2 foros técnicos (no crypto-hype)
+      Sugerencias:
+        - Lobste.rs
+        - Hacker News (con cuidado)
+        - Lista de correo de criptografía
+        - Reddit r/crypto (el de criptografía, no criptomonedas)
+    - NO publicar en r/cryptocurrency, Twitter crypto, etc.
+
+MES 2-3: Primeros usuarios
+─────────────────────────
+
+    - Responder TODAS las preguntas técnicas
+    - Documentar problemas encontrados
+    - Arreglar bugs
+    - Mantener nodo corriendo 24/7
+    - Esperar pacientemente a que alguien más corra un nodo
+
+MES 4-6: Estabilización
+──────────────────────
+
+    - Si hay 2-3 nodos más, éxito inicial
+    - Si no hay nadie, seguir corriendo tu nodo
+    - Bitcoin tuvo ~10 nodos después de 6 meses
+    - NO buscar inversores, exchanges, o hype
+    - Documentar todo para quien venga después
+
+DESPUÉS DE 6 MESES:
+──────────────────
+
+    Si Mooncoin tiene al menos:
+        - 3+ nodos independientes
+        - 10,000+ bloques minados
+        - 1+ persona que entienda el código
+        - Documentación completa
+    
+    Entonces puedes considerar desaparecer gradualmente.
+    
+    Si no:
+        - Seguir manteniendo
+        - O aceptar que quizás el mundo no lo necesita ahora
+        - El código seguirá existiendo para quien lo necesite
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE VI: PRESERVACIÓN INMUTABLE
+════════════════════════════════════════════════════════════════════════════════
+
+El código y documentación deben existir en múltiples lugares que no 
+dependan de ninguna entidad:
+
+1. GITHUB (Principal, pero centralizado)
+───────────────────────────────────────
+
+    github.com/[tu-usuario]/mooncoin
+    
+    Incluir:
+    - Todo el código
+    - Especificación
+    - Esta guía
+    - README
+    - Carta del creador
+
+2. ARCHIVE.ORG (Permanente)
+──────────────────────────
+
+    web.archive.org
+    
+    Subir ZIP completo del repositorio
+    Archive.org no borra contenido
+
+3. IPFS (Descentralizado)
+────────────────────────
+
+    # Instalar IPFS
+    ipfs init
+    ipfs add -r ./mooncoin/
+    
+    # Obtener CID (Content ID)
+    # Publicar CID en múltiples lugares
+    
+    El CID es permanente e inmutable.
+    Mientras alguien tenga el archivo, existe.
+
+4. TORRENTS (Peer-to-peer)
+─────────────────────────
+
+    Crear torrent del código
+    Sembrar indefinidamente
+    Publicar magnet link
+
+5. MÚLTIPLES FORKS
+─────────────────
+
+    Pedir a 2-3 personas que hagan fork en GitHub
+    Diferentes usuarios = más difícil de eliminar todo
+
+6. FIRMAS CRIPTOGRÁFICAS
+───────────────────────
+
+    # Generar clave
+    gpg --gen-key
+    
+    # Firmar documentos importantes
+    gpg --sign MOONCOIN_PROTOCOL_SPECIFICATION_v1.0.txt
+    gpg --sign CARTA_DEL_CREADOR.txt
+    
+    # Publicar clave pública
+    # Luego (opcional): destruir clave privada
+    
+    Esto permite verificar que los documentos son originales.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE VII: DEFENSA CONTRA ATAQUES SOCIALES
+════════════════════════════════════════════════════════════════════════════════
+
+ATAQUE: "Soy el nuevo líder de Mooncoin"
+────────────────────────────────────────
+
+    RESPUESTA: Mooncoin no tiene líderes. Ni siquiera el creador era
+    líder. Si alguien dice serlo, está mintiendo o creó otro proyecto.
+
+ATAQUE: "Mooncoin 2.0 con mejoras"
+──────────────────────────────────
+
+    RESPUESTA: Si cambió líneas rojas (supply, PoW, etc.), no es 
+    Mooncoin. Es otro proyecto usando el nombre. Ignorar.
+
+ATAQUE: "La fundación Mooncoin decidió..."
+─────────────────────────────────────────
+
+    RESPUESTA: No existe fundación Mooncoin. No puede existir.
+    Cualquier "fundación" es fraudulenta.
+
+ATAQUE: "Esta versión de Mooncoin tiene pre-mine justo"
+──────────────────────────────────────────────────────
+
+    RESPUESTA: Mooncoin original tiene 0 pre-mine. El bloque génesis
+    es provably unspendable. Cualquier versión con pre-mine es fraude.
+
+ATAQUE: "Necesitamos gobernanza para decidir..."
+───────────────────────────────────────────────
+
+    RESPUESTA: No. El protocolo está congelado. Las decisiones ya
+    están tomadas. No hay nada que votar.
+
+ATAQUE: "Los desarrolladores originales aprobaron este cambio"
+────────────────────────────────────────────────────────────
+
+    RESPUESTA: El desarrollador original desapareció intencionalmente.
+    No puede "aprobar" nada. Y aunque pudiera, no tendría autoridad.
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE VIII: CHECKLIST ANTES DE DESAPARECER
+════════════════════════════════════════════════════════════════════════════════
+
+MÍNIMO ABSOLUTO (hacer todo esto):
+
+    [ ] Código en GitHub público
+    [ ] Código en Archive.org
+    [ ] Código en IPFS (publicar CID)
+    [ ] Especificación firmada con GPG
+    [ ] README explicando qué es y qué no es Mooncoin
+    [ ] Carta del creador
+    [ ] Esta guía de supervivencia
+    [ ] Documento "Cómo identificar Mooncoin falso"
+    [ ] Al menos 1 persona más tiene copia del código
+
+RECOMENDADO (si tienes tiempo):
+
+    [ ] Nodo mínimo funcional
+    [ ] Bloque génesis real
+    [ ] Red corriendo (aunque sea solo tu nodo)
+    [ ] 100+ bloques minados
+    [ ] Wallet básico funcional
+    [ ] Torrent del código sembrado
+
+IDEAL (si puedes esperar 6 meses):
+
+    [ ] 3+ nodos independientes
+    [ ] 10,000+ bloques
+    [ ] Al menos 1 otra persona que entienda el código
+    [ ] Comunidad técnica mínima (aunque sean 5 personas)
+    [ ] Primera transacción real entre dos personas
+
+════════════════════════════════════════════════════════════════════════════════
+                    PARTE IX: MENSAJE FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+Mooncoin no necesita ser popular para cumplir su propósito.
+
+Bitcoin tardó años en importar. La mayoría lo ignoró.
+Satoshi minó solo por meses. Casi nadie prestó atención.
+
+Si Mooncoin existe en 10 años y UNA persona pudo:
+    - Recuperar fondos con Recovery Social
+    - Heredar crypto de un familiar fallecido
+    - Cancelar un robo con Vault
+    - Tener privacidad financiera
+
+Entonces habrá valido la pena.
+
+El trabajo está hecho. El código existe. La documentación existe.
+
+Ahora solo necesita sobrevivir.
+
+Y para sobrevivir, solo necesita:
+    - Existir en lugares que no se puedan borrar
+    - Ser claro sobre qué es y qué no es
+    - Esperar a que alguien lo necesite
+
+El resto está fuera de tu control.
+
+Hiciste tu parte.
+
+════════════════════════════════════════════════════════════════════════════════
+                    FIN DE LA GUÍA DE SUPERVIVENCIA
+════════════════════════════════════════════════════════════════════════════════
