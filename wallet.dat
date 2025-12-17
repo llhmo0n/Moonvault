@@ -1,0 +1,16 @@
+{
+  "mnemonic_phrase": "under gasp arena avocado flock tired copy tattoo inside laptop stadium buddy silent mushroom mammal garden square zone merry spike ordinary verb erupt silly",
+  "current_index": 1,
+  "addresses": [
+    {
+      "index": 0,
+      "address": "MLNAcPx4hqszHEQQqy3vxcUQjhdLg1ZTES",
+      "path": "m/44'/0'/0'/0/0"
+    },
+    {
+      "index": 1,
+      "address": "MAZCM41PXvoUR1pXBNQruH6ZCUZ2Cd8886",
+      "path": "m/44'/0'/0'/0/1"
+    }
+  ]
+}

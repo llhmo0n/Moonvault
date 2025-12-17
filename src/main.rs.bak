@@ -1,0 +1,615 @@
+// =============================================================================
+// MOONCOIN v2.0 - Main Entry Point
+// La plata digital - Bitcoin 2009 style in Rust 2025
+// =============================================================================
+
+mod lib;
+mod transaction;
+mod wallet;
+mod block;
+mod utxo;
+mod difficulty;
+mod validation;
+mod network;
+mod mempool;
+
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
+use clap::{Parser, Subcommand};
+use chrono::Local;
+
+use crate::lib::*;
+use crate::transaction::{Tx, TxIn, TxOut, tx_hash};
+use crate::wallet::{load_or_create_key, get_pubkey, get_address, sign_tx, validate_address};
+use crate::block::{Block, load_chain, save_chain, create_genesis_block, mine_block};
+use crate::utxo::UtxoSet;
+use crate::difficulty::calculate_next_difficulty;
+use crate::validation::{validate_block, validate_transaction};
+use crate::network::{NodeState, start_p2p_server, broadcast_block};
+use crate::mempool::Mempool;
+
+// =============================================================================
+// CLI Definition
+// =============================================================================
+
+#[derive(Parser)]
+#[command(name = "mooncoin")]
+#[command(author = "KNKI")]
+#[command(version = "2.0.0")]
+#[command(about = "Mooncoin - La plata digital", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the node and begin mining
+    Run,
+    
+    /// Show wallet address and balance
+    Balance,
+    
+    /// Send coins to an address
+    Send {
+        /// Recipient address
+        to: String,
+        /// Amount in MOON (e.g., 10.5)
+        amount: f64,
+    },
+    
+    /// Show blockchain status
+    Status,
+    
+    /// Show wallet address
+    Address,
+    
+    /// Validate the entire blockchain
+    Validate,
+    
+    /// Export blockchain info
+    Export,
+}
+
+// =============================================================================
+// Main
+// =============================================================================
+
+#[tokio::main]
+async fn main() {
+    // Initialize logger
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_secs()
+        .init();
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Run) | None => cmd_run().await,
+        Some(Commands::Balance) => cmd_balance(),
+        Some(Commands::Send { to, amount }) => cmd_send(to, amount),
+        Some(Commands::Status) => cmd_status(),
+        Some(Commands::Address) => cmd_address(),
+        Some(Commands::Validate) => cmd_validate(),
+        Some(Commands::Export) => cmd_export(),
+    }
+}
+
+// =============================================================================
+// Commands
+// =============================================================================
+
+/// Limpia la pantalla y mueve el cursor al inicio
+fn clear_screen() {
+    print!("\x1B[2J\x1B[H");
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+}
+
+/// Muestra el dashboard de minado
+fn display_dashboard(
+    my_address: &str,
+    height: u64,
+    balance: u64,
+    spendable: u64,
+    utxo_count: usize,
+    mempool_count: usize,
+    difficulty: u32,
+    last_block: Option<&Block>,
+    mining_status: &str,
+    next_halving: u64,
+    supply: u64,
+) {
+    clear_screen();
+    
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+    
+    println!("╔═══════════════════════════════════════════════════════════════════════╗");
+    println!("║              MOONCOIN v2.0 - La Plata Digital                         ║");
+    println!("║          Bitcoin 2009 style in Rust 2025 - by KNKI                    ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════╣");
+    println!("║  {}                                            ║", now);
+    println!("╚═══════════════════════════════════════════════════════════════════════╝");
+    println!();
+    println!("  📍 Wallet: {}", my_address);
+    println!();
+    println!("┌───────────────────────────────────────────────────────────────────────┐");
+    println!("│                           BLOCKCHAIN STATUS                           │");
+    println!("├───────────────────────────────────────────────────────────────────────┤");
+    println!("│  Height:          {:>20}                              │", height);
+    println!("│  Difficulty:      {:>20} bits                         │", difficulty);
+    println!("│  Supply:          {:>20}                              │", format_coins(supply));
+    println!("│  Next Halving:    {:>20} blocks                       │", next_halving);
+    println!("└───────────────────────────────────────────────────────────────────────┘");
+    println!();
+    println!("┌───────────────────────────────────────────────────────────────────────┐");
+    println!("│                             YOUR WALLET                               │");
+    println!("├───────────────────────────────────────────────────────────────────────┤");
+    println!("│  💰 Balance:      {:>20}                              │", format_coins(balance));
+    println!("│  💸 Spendable:    {:>20}                              │", format_coins(spendable));
+    println!("│  📦 UTXOs:        {:>20}                              │", utxo_count);
+    println!("└───────────────────────────────────────────────────────────────────────┘");
+    println!();
+    
+    if let Some(block) = last_block {
+        println!("┌───────────────────────────────────────────────────────────────────────┐");
+        println!("│                           LAST BLOCK MINED                            │");
+        println!("├───────────────────────────────────────────────────────────────────────┤");
+        println!("│  🔗 Hash:         {}...              │", &block.hash[..24]);
+        println!("│  🎲 Nonce:        {:>20}                              │", block.nonce);
+        println!("│  📝 Txs:          {:>20}                              │", block.txs.len());
+        println!("│  🎁 Reward:       {:>20}                              │", format_coins(get_reward(block.height)));
+        println!("└───────────────────────────────────────────────────────────────────────┘");
+        println!();
+    }
+    
+    println!("┌───────────────────────────────────────────────────────────────────────┐");
+    println!("│  ⛏️  {}  │", format!("{:^63}", mining_status));
+    println!("├───────────────────────────────────────────────────────────────────────┤");
+    println!("│  Mempool: {} pending tx(s)                                            │", mempool_count);
+    println!("│  P2P: listening on port {}                                         │", P2P_PORT);
+    println!("└───────────────────────────────────────────────────────────────────────┘");
+    println!();
+    println!("  Press Ctrl+C to stop mining");
+}
+
+/// Run the node and mine
+async fn cmd_run() {
+    // Load or create wallet
+    let secret_key = load_or_create_key();
+    let pubkey = get_pubkey(&secret_key);
+    let my_address = get_address(&pubkey);
+
+    // Load or create chain
+    let mut chain = load_chain();
+    let mut is_new_chain = false;
+    
+    if chain.is_empty() {
+        is_new_chain = true;
+        let genesis = create_genesis_block(&my_address);
+        chain.push(genesis);
+        save_chain(&chain);
+    }
+
+    // Build UTXO set
+    let mut utxo = UtxoSet::rebuild_from_chain(&chain);
+    
+    // Load mempool
+    let mut mempool = Mempool::load();
+
+    // Create shared state for P2P
+    let state = Arc::new(RwLock::new(NodeState {
+        chain: chain.clone(),
+        pending_txs: mempool.txs.values().cloned().collect(),
+        peers: vec![],
+    }));
+
+    // Start P2P server in background
+    let state_clone = Arc::clone(&state);
+    tokio::spawn(async move {
+        start_p2p_server(state_clone).await;
+    });
+
+    // Initial display
+    let height = chain.len() as u64 - 1;
+    let balance = utxo.balance_of(&my_address);
+    let spendable = utxo.spendable_balance(&my_address, height);
+    let next_halving = HALVING_INTERVAL - (height % HALVING_INTERVAL);
+    let supply = utxo.total_supply();
+    let difficulty = calculate_next_difficulty(&chain);
+    
+    let status_msg = if is_new_chain {
+        "Genesis block created! Starting mining..."
+    } else {
+        "Resuming mining..."
+    };
+    
+    display_dashboard(
+        &my_address,
+        height,
+        balance,
+        spendable,
+        utxo.len(),
+        mempool.len(),
+        difficulty,
+        chain.last(),
+        status_msg,
+        next_halving,
+        supply,
+    );
+    
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Mining loop
+    loop {
+        let height = chain.len() as u64;
+        let prev_hash = chain.last().unwrap().hash.clone();
+        
+        // Calculate difficulty for next block
+        let difficulty = calculate_next_difficulty(&chain);
+        
+        // Calculate reward
+        let reward = get_reward(height);
+        if reward == 0 {
+            display_dashboard(
+                &my_address,
+                height - 1,
+                utxo.balance_of(&my_address),
+                utxo.spendable_balance(&my_address, height - 1),
+                utxo.len(),
+                mempool.len(),
+                difficulty,
+                chain.last(),
+                "⚠️  MAXIMUM SUPPLY REACHED - Mining stopped",
+                0,
+                utxo.total_supply(),
+            );
+            break;
+        }
+
+        // Display mining status
+        display_dashboard(
+            &my_address,
+            height - 1,
+            utxo.balance_of(&my_address),
+            utxo.spendable_balance(&my_address, height - 1),
+            utxo.len(),
+            mempool.len(),
+            difficulty,
+            chain.last(),
+            &format!("Mining block {}... (difficulty: {} bits)", height, difficulty),
+            HALVING_INTERVAL - (height % HALVING_INTERVAL),
+            utxo.total_supply(),
+        );
+
+        // Get pending transactions from mempool
+        let pending_txs = mempool.get_txs_for_block(&utxo, height, MAX_TXS_PER_BLOCK - 1);
+        
+        // Create coinbase
+        let coinbase = Tx::new_coinbase(my_address.clone(), reward, height);
+        
+        // Build transaction list (coinbase first)
+        let mut txs = vec![coinbase];
+        txs.extend(pending_txs.clone());
+
+        // Mine the block
+        let new_block = mine_block(height, &prev_hash, txs, difficulty);
+
+        // Validate the new block
+        match validate_block(&new_block, &chain, &utxo, difficulty) {
+            Ok(()) => {
+                // Add to chain
+                chain.push(new_block.clone());
+                save_chain(&chain);
+                
+                // Update UTXO
+                utxo.apply_block(&new_block);
+                
+                // Remove confirmed txs from mempool
+                let confirmed_txids: Vec<String> = new_block.txs.iter()
+                    .skip(1)  // Skip coinbase
+                    .map(|tx| tx_hash(tx))
+                    .collect();
+                mempool.remove_confirmed(&confirmed_txids);
+                
+                // Update shared state
+                {
+                    let mut state = state.write().await;
+                    state.chain = chain.clone();
+                    state.pending_txs = mempool.txs.values().cloned().collect();
+                }
+                
+                // Broadcast block to peers
+                broadcast_block(&new_block, &state).await;
+                
+                // Display updated dashboard
+                let balance = utxo.balance_of(&my_address);
+                let spendable = utxo.spendable_balance(&my_address, height);
+                let next_halving = HALVING_INTERVAL - ((height + 1) % HALVING_INTERVAL);
+                
+                display_dashboard(
+                    &my_address,
+                    height,
+                    balance,
+                    spendable,
+                    utxo.len(),
+                    mempool.len(),
+                    difficulty,
+                    Some(&new_block),
+                    &format!("✅ Block {} mined! Waiting {} seconds...", height, BLOCK_TIME_TARGET),
+                    next_halving,
+                    utxo.total_supply(),
+                );
+            }
+            Err(e) => {
+                display_dashboard(
+                    &my_address,
+                    height - 1,
+                    utxo.balance_of(&my_address),
+                    utxo.spendable_balance(&my_address, height - 1),
+                    utxo.len(),
+                    mempool.len(),
+                    difficulty,
+                    chain.last(),
+                    &format!("❌ Block validation failed: {}", e),
+                    HALVING_INTERVAL - (height % HALVING_INTERVAL),
+                    utxo.total_supply(),
+                );
+            }
+        }
+
+        // Prune invalid transactions from mempool
+        mempool.prune_invalid(&utxo, height);
+
+        // Wait before next block with countdown
+        for remaining in (1..=BLOCK_TIME_TARGET).rev() {
+            if remaining % 10 == 0 || remaining <= 5 {
+                display_dashboard(
+                    &my_address,
+                    chain.len() as u64 - 1,
+                    utxo.balance_of(&my_address),
+                    utxo.spendable_balance(&my_address, chain.len() as u64 - 1),
+                    utxo.len(),
+                    mempool.len(),
+                    difficulty,
+                    chain.last(),
+                    &format!("⏳ Next block in {} seconds...", remaining),
+                    HALVING_INTERVAL - (chain.len() as u64 % HALVING_INTERVAL),
+                    utxo.total_supply(),
+                );
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    }
+}
+
+/// Show balance
+fn cmd_balance() {
+    let secret_key = load_or_create_key();
+    let pubkey = get_pubkey(&secret_key);
+    let my_address = get_address(&pubkey);
+    
+    let chain = load_chain();
+    let utxo = UtxoSet::rebuild_from_chain(&chain);
+    let height = chain.len().saturating_sub(1) as u64;
+    
+    let balance = utxo.balance_of(&my_address);
+    let spendable = utxo.spendable_balance(&my_address, height);
+    
+    println!();
+    println!("Address:   {}", my_address);
+    println!("Balance:   {}", format_coins(balance));
+    println!("Spendable: {}", format_coins(spendable));
+    println!();
+    
+    if balance != spendable {
+        let immature = balance - spendable;
+        println!("Note: {} is from immature coinbase (needs {} more confirmations)",
+            format_coins(immature),
+            COINBASE_MATURITY
+        );
+    }
+}
+
+/// Send coins
+fn cmd_send(to: String, amount_float: f64) {
+    // Validate address
+    if !validate_address(&to) {
+        eprintln!("Error: Invalid address format");
+        return;
+    }
+    
+    // Convert to satoshis
+    let amount = (amount_float * 100_000_000.0) as u64;
+    
+    if amount == 0 {
+        eprintln!("Error: Amount must be greater than 0");
+        return;
+    }
+    
+    // Load wallet
+    let secret_key = load_or_create_key();
+    let pubkey = get_pubkey(&secret_key);
+    let my_address = get_address(&pubkey);
+    
+    // Load chain and build UTXO
+    let chain = load_chain();
+    let utxo = UtxoSet::rebuild_from_chain(&chain);
+    let height = chain.len().saturating_sub(1) as u64;
+    
+    // Check spendable balance
+    let spendable = utxo.spendable_balance(&my_address, height);
+    if spendable < amount {
+        eprintln!("Error: Insufficient spendable balance");
+        eprintln!("  Requested: {}", format_coins(amount));
+        eprintln!("  Available: {}", format_coins(spendable));
+        return;
+    }
+    
+    // Find UTXOs to spend
+    let found = match utxo.find_spendable(&my_address, amount, height) {
+        Some(f) => f,
+        None => {
+            eprintln!("Error: Could not find suitable UTXOs");
+            return;
+        }
+    };
+    
+    // Build inputs
+    let mut inputs = Vec::new();
+    let mut input_sum = 0u64;
+    
+    for ((txid, idx), entry) in &found {
+        inputs.push(TxIn {
+            prev_tx_hash: txid.clone(),
+            prev_index: *idx,
+            signature: vec![],
+            pubkey: vec![],
+        });
+        input_sum += entry.output.amount;
+    }
+    
+    // Build outputs
+    let mut outputs = vec![TxOut {
+        to: to.clone(),
+        amount,
+    }];
+    
+    // Add change output if needed
+    let change = input_sum - amount;
+    if change > 0 {
+        outputs.push(TxOut {
+            to: my_address.clone(),
+            amount: change,
+        });
+    }
+    
+    // Create transaction
+    let mut tx = Tx { inputs, outputs };
+    
+    // Sign transaction
+    sign_tx(&mut tx, &secret_key);
+    
+    // Validate transaction
+    if let Err(e) = validate_transaction(&tx, &utxo, height, false) {
+        eprintln!("Error: Transaction validation failed: {}", e);
+        return;
+    }
+    
+    // Add to mempool
+    let mut mempool = Mempool::load();
+    match mempool.add_tx(tx.clone(), &utxo, height) {
+        Ok(txid) => {
+            println!();
+            println!("✓ Transaction created successfully!");
+            println!();
+            println!("  TxID:   {}...", &txid[..32]);
+            println!("  To:     {}", to);
+            println!("  Amount: {}", format_coins(amount));
+            if change > 0 {
+                println!("  Change: {}", format_coins(change));
+            }
+            println!();
+            println!("Transaction added to mempool. Will be included in next block.");
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to add transaction to mempool: {}", e);
+        }
+    }
+}
+
+/// Show blockchain status
+fn cmd_status() {
+    let chain = load_chain();
+    let utxo = UtxoSet::rebuild_from_chain(&chain);
+    
+    if chain.is_empty() {
+        println!("Blockchain is empty. Run 'mooncoin run' to create genesis block.");
+        return;
+    }
+    
+    let last_block = chain.last().unwrap();
+    let height = chain.len() - 1;
+    let supply = utxo.total_supply();
+    let utxo_count = utxo.len();
+    
+    let (blocks_since, blocks_until) = difficulty::difficulty_adjustment_progress(height as u64);
+    
+    println!();
+    println!("╔═══════════════════════════════════════════════════════════╗");
+    println!("║                   MOONCOIN STATUS                         ║");
+    println!("╚═══════════════════════════════════════════════════════════╝");
+    println!();
+    println!("  Height:           {}", height);
+    println!("  Last Hash:        {}...", &last_block.hash[..16]);
+    println!("  Difficulty:       {} bits", last_block.difficulty_bits);
+    println!("  Timestamp:        {}", last_block.timestamp);
+    println!();
+    println!("  Total Supply:     {}", format_coins(supply));
+    println!("  Max Supply:       {}", format_coins(MAX_SUPPLY));
+    println!("  Mined:            {:.4}%", (supply as f64 / MAX_SUPPLY as f64) * 100.0);
+    println!();
+    println!("  UTXO Count:       {}", utxo_count);
+    println!("  Block Reward:     {}", format_coins(get_reward(height as u64)));
+    println!();
+    println!("  Next Adjustment:  in {} blocks", blocks_until);
+    println!("  Next Halving:     in {} blocks", HALVING_INTERVAL - (height as u64 % HALVING_INTERVAL));
+    println!();
+}
+
+/// Show wallet address
+fn cmd_address() {
+    let secret_key = load_or_create_key();
+    let pubkey = get_pubkey(&secret_key);
+    let address = get_address(&pubkey);
+    
+    println!();
+    println!("Your Mooncoin address:");
+    println!();
+    println!("  {}", address);
+    println!();
+}
+
+/// Validate entire blockchain
+fn cmd_validate() {
+    println!("Validating blockchain...");
+    
+    let chain = load_chain();
+    
+    if chain.is_empty() {
+        println!("Blockchain is empty.");
+        return;
+    }
+    
+    match validation::validate_chain(&chain) {
+        Ok(()) => {
+            println!();
+            println!("✓ Blockchain is valid!");
+            println!("  {} blocks verified", chain.len());
+        }
+        Err((index, error)) => {
+            println!();
+            println!("✗ Blockchain is INVALID!");
+            println!("  Error at block {}: {}", index, error);
+        }
+    }
+}
+
+/// Export blockchain info
+fn cmd_export() {
+    let chain = load_chain();
+    
+    println!("height,hash,prev_hash,timestamp,difficulty,nonce,tx_count");
+    
+    for block in &chain {
+        println!("{},{},{},{},{},{},{}",
+            block.height,
+            block.hash,
+            block.prev_hash,
+            block.timestamp,
+            block.difficulty_bits,
+            block.nonce,
+            block.txs.len()
+        );
+    }
+}

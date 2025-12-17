@@ -1,8 +1,43 @@
+# Rust
 /target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mooncoin data
+mooncoin_data/
+btc_locks.json
+*.wallet
+*.db
+*.log
+
+# Keys (NEVER commit)
 *.key
-wallet.dat
-wallet.encrypted
-chain.json
-mempool.json
-*.bak
-.env
+*.pem
+*_privkey*
+*_secret*
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+test_*
+*.test
+
+# Temporary
+tmp/
+temp/
+*.tmp

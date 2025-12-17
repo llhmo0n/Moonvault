@@ -946,8 +946,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mooncoin"
-version = "2.0.0"
+name = "moonvault"
+version = "4.0.0"
 dependencies = [
  "aes-gcm",
  "bincode",

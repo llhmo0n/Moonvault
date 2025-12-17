@@ -1,6 +1,11 @@
 // =============================================================================
-// MOONCOIN v2.0 - Main Entry Point
-// La plata digital - Bitcoin 2009 style in Rust 2025
+// MOONVAULT v4.0 - Bitcoin Security Infrastructure
+// "Protecting your Bitcoin, not replacing it"
+// =============================================================================
+//
+// IMPORTANT: MoonVault is NOT money. It is infrastructure software.
+// BTC is the only economic asset. Gas units have no monetary value.
+//
 // =============================================================================
 
 #![allow(special_module_name)]
@@ -47,6 +52,8 @@ mod recovery;
 mod inheritance;
 mod genesis;
 mod node;
+mod fee_system;
+mod vault_service;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,10 +80,10 @@ use crate::explorer::{start_explorer, EXPLORER_PORT};
 // =============================================================================
 
 #[derive(Parser)]
-#[command(name = "mooncoin")]
+#[command(name = "moonvault")]
 #[command(author = "KNKI")]
-#[command(version = "2.0.0")]
-#[command(about = "Mooncoin - La plata digital", long_about = None)]
+#[command(version = "4.0.0")]
+#[command(about = "MoonVault - Bitcoin Security Infrastructure", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -541,6 +548,101 @@ enum Commands {
         #[arg(long)]
         testnet: bool,
     },
+    
+    // =========================================================================
+    // FEE SYSTEM COMMANDS (v4.0)
+    // =========================================================================
+    
+    /// [FEE] Generate invoice for a service (paid in BTC)
+    FeeInvoice {
+        /// Service type: vault-create, vault-modify, monitoring-monthly
+        service: String,
+        /// Your public key (hex)
+        #[arg(long)]
+        pubkey: String,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [FEE] Verify a BTC payment for an invoice
+    FeeVerify {
+        /// Bitcoin transaction ID of the payment
+        txid: String,
+        /// Invoice ID to verify against
+        #[arg(long)]
+        invoice: String,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [FEE] Show Fee Pool status
+    FeePoolStatus {
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    // =========================================================================
+    // VAULT SERVICE COMMANDS (v4.0)
+    // =========================================================================
+    
+    /// [VAULT] Create a new security vault (requires paid invoice)
+    VaultCreate {
+        /// Invoice ID (must be paid and confirmed)
+        #[arg(long)]
+        invoice: String,
+        /// Hot key public key (for daily operations)
+        #[arg(long)]
+        hot_key: String,
+        /// Cold key public key (for large withdrawals)
+        #[arg(long)]
+        cold_key: String,
+        /// Recovery key public key (for emergencies)
+        #[arg(long)]
+        recovery_key: String,
+        /// Daily limit in satoshis for hot key
+        #[arg(long, default_value = "100000")]
+        daily_limit: u64,
+        /// Delay in blocks for cold key withdrawals
+        #[arg(long, default_value = "144")]
+        cold_delay: u32,
+        /// Timelock block height for recovery
+        #[arg(long)]
+        timelock: u32,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [VAULT] Show vault status
+    VaultStatus {
+        /// Vault ID
+        vault_id: String,
+        /// Use testnet
+        #[arg(long)]
+        testnet: bool,
+    },
+    
+    /// [VAULT] Activate panic button (freeze all operations)
+    VaultPanic {
+        /// Vault ID
+        vault_id: String,
+        /// Recovery private key (hex)
+        #[arg(long)]
+        recovery_key: String,
+    },
+    
+    /// [VAULT] List all your vaults
+    VaultList {
+        /// Filter by owner public key
+        #[arg(long)]
+        owner: Option<String>,
+    },
+    
+    /// [GAS] Show gas balance (anti-spam units)
+    GasBalance,
 }
 
 // =============================================================================
@@ -549,6 +651,9 @@ enum Commands {
 
 #[tokio::main]
 async fn main() {
+    // Print startup warning (MoonVault is NOT money)
+    crate::lib::print_startup_warning();
+    
     // Initialize logger (solo warnings y errores para no interferir con dashboard)
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
         .format_timestamp_secs()
@@ -641,6 +746,28 @@ async fn main() {
         Some(Commands::BtcLockHealth) => cmd_btc_lock_health(),
         Some(Commands::BtcLockSettle { txid, vout, destination, privkey, fee_rate, testnet }) 
             => cmd_btc_lock_settle(txid, vout, destination, privkey, fee_rate, testnet),
+        
+        // Fee System Commands (v4.0)
+        Some(Commands::FeeInvoice { service, pubkey, testnet }) 
+            => cmd_fee_invoice(service, pubkey, testnet),
+        Some(Commands::FeeVerify { txid, invoice, testnet }) 
+            => cmd_fee_verify(txid, invoice, testnet),
+        Some(Commands::FeePoolStatus { testnet }) 
+            => cmd_fee_pool_status(testnet),
+        
+        // Vault Service Commands (v4.0)
+        Some(Commands::VaultCreate { invoice, hot_key, cold_key, recovery_key, daily_limit, cold_delay, timelock, testnet }) 
+            => cmd_vault_create(invoice, hot_key, cold_key, recovery_key, daily_limit, cold_delay, timelock, testnet),
+        Some(Commands::VaultStatus { vault_id, testnet }) 
+            => cmd_vault_status(vault_id, testnet),
+        Some(Commands::VaultPanic { vault_id, recovery_key }) 
+            => cmd_vault_panic(vault_id, recovery_key),
+        Some(Commands::VaultList { owner }) 
+            => cmd_vault_list(owner),
+        
+        // Gas Commands (v4.0)
+        Some(Commands::GasBalance) 
+            => cmd_gas_balance(),
     }
 }
 
@@ -673,28 +800,28 @@ fn display_dashboard(
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     
     println!("╔═══════════════════════════════════════════════════════════════════════╗");
-    println!("║              MOONCOIN v2.0 - La Plata Digital                         ║");
-    println!("║          Bitcoin 2009 style in Rust 2025 - by KNKI                    ║");
+    println!("║              MOONVAULT v4.0 - Bitcoin Security Infrastructure         ║");
+    println!("║                     Protecting your Bitcoin - by KNKI                 ║");
     println!("╠═══════════════════════════════════════════════════════════════════════╣");
     println!("║  {}                                            ║", now);
     println!("╚═══════════════════════════════════════════════════════════════════════╝");
     println!();
-    println!("  📍 Wallet: {}", my_address);
+    println!("  📍 Node: {}", my_address);
     println!();
     println!("┌───────────────────────────────────────────────────────────────────────┐");
-    println!("│                           BLOCKCHAIN STATUS                           │");
+    println!("│                        COORDINATION LAYER STATUS                      │");
     println!("├───────────────────────────────────────────────────────────────────────┤");
     println!("│  Height:          {:>20}                              │", height);
     println!("│  Difficulty:      {:>20} bits                         │", difficulty);
-    println!("│  Supply:          {:>20}                              │", format_coins(supply));
-    println!("│  Next Halving:    {:>20} blocks                       │", next_halving);
+    println!("│  Gas Minted:      {:>20}                              │", format_gas(supply));
+    println!("│  Block Reward:    {:>20}                              │", format_gas(get_reward(height)));
     println!("└───────────────────────────────────────────────────────────────────────┘");
     println!();
     println!("┌───────────────────────────────────────────────────────────────────────┐");
-    println!("│                             YOUR WALLET                               │");
+    println!("│                           GAS BALANCE (anti-spam)                     │");
     println!("├───────────────────────────────────────────────────────────────────────┤");
-    println!("│  💰 Balance:      {:>20}                              │", format_coins(balance));
-    println!("│  💸 Spendable:    {:>20}                              │", format_coins(spendable));
+    println!("│  ⛽ Gas Available: {:>20}                              │", format_gas(balance));
+    println!("│  🔥 Burnable:     {:>20}                              │", format_gas(spendable));
     println!("│  📦 UTXOs:        {:>20}                              │", utxo_count);
     println!("└───────────────────────────────────────────────────────────────────────┘");
     println!();
@@ -706,7 +833,7 @@ fn display_dashboard(
         println!("│  🔗 Hash:         {}...              │", &block.hash[..24]);
         println!("│  🎲 Nonce:        {:>20}                              │", block.nonce);
         println!("│  📝 Txs:          {:>20}                              │", block.txs.len());
-        println!("│  🎁 Reward:       {:>20}                              │", format_coins(get_reward(block.height)));
+        println!("│  ⛽ Gas Reward:   {:>20}                              │", format_gas(get_reward(block.height)));
         println!("└───────────────────────────────────────────────────────────────────────┘");
         println!();
     }
@@ -1242,7 +1369,7 @@ fn cmd_status() {
     
     println!();
     println!("╔═══════════════════════════════════════════════════════════╗");
-    println!("║                   MOONCOIN STATUS                         ║");
+    println!("║                   MOONVAULT STATUS                        ║");
     println!("╚═══════════════════════════════════════════════════════════╝");
     println!();
     println!("  Height:           {}", height);
@@ -1251,26 +1378,24 @@ fn cmd_status() {
     println!("  Chain Work:       2^{:.2}", (chain_work as f64).log2());
     println!("  Timestamp:        {}", last_block.timestamp);
     println!();
-    println!("  Total Supply:     {}", format_coins(supply));
-    println!("  Max Supply:       {}", format_coins(MAX_SUPPLY));
-    println!("  Mined:            {:.4}%", (supply as f64 / MAX_SUPPLY as f64) * 100.0);
+    println!("  Gas Minted:       {}", format_gas(supply));
+    println!("  Block Reward:     {}", format_gas(get_reward(height as u64)));
+    println!("  (Gas has no monetary value - anti-spam only)");
     println!();
     println!("  UTXO Count:       {}", utxo_count);
-    println!("  Block Reward:     {}", format_coins(get_reward(height as u64)));
     println!();
     println!("  Next Adjustment:  in {} blocks", blocks_until);
-    println!("  Next Halving:     in {} blocks", HALVING_INTERVAL - (height as u64 % HALVING_INTERVAL));
     println!();
 }
 
-/// Show wallet address
+/// Show node address
 fn cmd_address() {
     let secret_key = load_or_create_key();
     let pubkey = get_pubkey(&secret_key);
     let address = get_address(&pubkey);
     
     println!();
-    println!("Your Mooncoin address:");
+    println!("Your MoonVault node address:");
     println!();
     println!("  {}", address);
     println!();
@@ -7146,4 +7271,226 @@ fn cmd_btc_lock_settle(
             println!();
         }
     }
+}
+
+// =============================================================================
+// MOONVAULT v4.0 - Fee System Commands
+// =============================================================================
+
+/// Generate fee invoice for a service
+fn cmd_fee_invoice(service: String, pubkey: String, testnet: bool) {
+    use crate::fee_system::{ServiceType, generate_invoice, print_invoice, save_invoice};
+    
+    let service_type = match service.as_str() {
+        "vault-create" => ServiceType::VaultCreate,
+        "vault-modify" => ServiceType::VaultModify,
+        "monitoring-monthly" => ServiceType::MonitoringMonthly,
+        _ => {
+            println!();
+            println!("  ❌ Unknown service type: {}", service);
+            println!();
+            println!("  Available services:");
+            println!("    - vault-create        (10,000 sats)");
+            println!("    - vault-modify        (5,000 sats)");
+            println!("    - monitoring-monthly  (1,000 sats)");
+            println!();
+            return;
+        }
+    };
+    
+    let invoice = generate_invoice(service_type, &pubkey, testnet);
+    save_invoice(&invoice);
+    print_invoice(&invoice);
+}
+
+/// Verify BTC payment for an invoice
+fn cmd_fee_verify(txid: String, invoice_id: String, testnet: bool) {
+    use crate::fee_system::{verify_payment, print_verification};
+    
+    println!();
+    println!("  Verifying payment...");
+    
+    match verify_payment(&txid, &invoice_id, testnet) {
+        Ok(result) => {
+            print_verification(&result);
+        }
+        Err(e) => {
+            println!();
+            println!("  ❌ Verification failed: {}", e);
+            println!();
+        }
+    }
+}
+
+/// Show Fee Pool status
+fn cmd_fee_pool_status(testnet: bool) {
+    use crate::fee_system::{get_fee_pool_status, print_fee_pool_status};
+    
+    match get_fee_pool_status(testnet) {
+        Ok(status) => {
+            print_fee_pool_status(&status);
+        }
+        Err(e) => {
+            println!();
+            println!("  ❌ Failed to get Fee Pool status: {}", e);
+            println!();
+        }
+    }
+}
+
+// =============================================================================
+// MOONVAULT v4.0 - Vault Service Commands
+// =============================================================================
+
+/// Create a new vault
+fn cmd_vault_create(
+    invoice: String,
+    hot_key: String,
+    cold_key: String,
+    recovery_key: String,
+    daily_limit: u64,
+    cold_delay: u32,
+    timelock: u32,
+    testnet: bool,
+) {
+    use crate::vault_service::{VaultCreateParams, create_vault, print_vault_created};
+    
+    println!();
+    println!("  Creating vault...");
+    
+    let params = VaultCreateParams {
+        owner_pubkey: hot_key.clone(), // Owner is hot key holder
+        hot_pubkey: hot_key,
+        cold_pubkey: cold_key,
+        recovery_pubkey: recovery_key,
+        daily_limit_sats: daily_limit,
+        cold_delay_blocks: cold_delay,
+        recovery_timelock: timelock,
+        testnet,
+        invoice_id: invoice,
+    };
+    
+    match create_vault(params) {
+        Ok(vault) => {
+            print_vault_created(&vault);
+        }
+        Err(e) => {
+            println!();
+            println!("  ❌ Failed to create vault: {}", e);
+            println!();
+            println!("  Make sure:");
+            println!("    - Invoice is paid and confirmed (3+ confirmations)");
+            println!("    - Invoice is for vault-create service");
+            println!("    - All public keys are valid (33 bytes hex)");
+            println!();
+        }
+    }
+}
+
+/// Show vault status
+fn cmd_vault_status(vault_id: String, testnet: bool) {
+    use crate::vault_service::{refresh_vault_status, print_vault_status, get_vault_status};
+    
+    // Try to refresh from network first
+    let vault = match refresh_vault_status(&vault_id, testnet) {
+        Ok(v) => v,
+        Err(_) => {
+            // Fall back to local status
+            match get_vault_status(&vault_id) {
+                Ok(v) => v,
+                Err(e) => {
+                    println!();
+                    println!("  ❌ Vault not found: {}", e);
+                    println!();
+                    return;
+                }
+            }
+        }
+    };
+    
+    print_vault_status(&vault);
+}
+
+/// Activate panic button
+fn cmd_vault_panic(vault_id: String, recovery_key: String) {
+    use crate::vault_service::{activate_panic, print_panic_activated};
+    
+    println!();
+    println!("  ⚠️  WARNING: You are about to activate the PANIC BUTTON");
+    println!("       This will FREEZE all vault operations.");
+    println!();
+    
+    // Confirm
+    print!("  Type 'PANIC' to confirm: ");
+    use std::io::{self, Write};
+    io::stdout().flush().unwrap();
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    
+    if input.trim() != "PANIC" {
+        println!();
+        println!("  ❌ Cancelled. Panic button NOT activated.");
+        println!();
+        return;
+    }
+    
+    match activate_panic(&vault_id, &recovery_key) {
+        Ok(vault) => {
+            print_panic_activated(&vault);
+        }
+        Err(e) => {
+            println!();
+            println!("  ❌ Failed to activate panic button: {}", e);
+            println!();
+        }
+    }
+}
+
+/// List all vaults
+fn cmd_vault_list(owner: Option<String>) {
+    use crate::vault_service::{list_vaults, print_vault_list};
+    
+    let vaults = list_vaults(owner.as_deref());
+    print_vault_list(&vaults);
+}
+
+// =============================================================================
+// MOONVAULT v4.0 - Gas Commands
+// =============================================================================
+
+/// Show gas balance
+fn cmd_gas_balance() {
+    let chain = load_chain();
+    let secret_key = load_or_create_key();
+    let pubkey = get_pubkey(&secret_key);
+    let address = get_address(&pubkey);
+    
+    // Calculate balance using rebuild_from_chain
+    let utxo_set = UtxoSet::rebuild_from_chain(&chain);
+    let balance = utxo_set.balance_of(&address);
+    let utxo_count = utxo_set.len();  // Total UTXOs in set
+    
+    println!();
+    println!("╔═══════════════════════════════════════════════════════════════════════════╗");
+    println!("║                          GAS BALANCE                                      ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════════╣");
+    println!("║                                                                           ║");
+    println!("║  ⚠️  IMPORTANT: Gas units have NO monetary value.                         ║");
+    println!("║      They exist only for anti-spam purposes.                              ║");
+    println!("║      Gas is NOT transferable - it can only be burned.                     ║");
+    println!("║                                                                           ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════════╣");
+    println!("║                                                                           ║");
+    println!("║  Address:       {}           ║", address);
+    println!("║                                                                           ║");
+    println!("║  Gas Available: {:>20}                              ║", format_gas(balance));
+    println!("║                                                                           ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════════╣");
+    println!("║                                                                           ║");
+    println!("║  To get more gas: Run the node with 'moonvault run' to mine.              ║");
+    println!("║  Gas is burned when requesting services (1 gas per request).              ║");
+    println!("║                                                                           ║");
+    println!("╚═══════════════════════════════════════════════════════════════════════════╝");
+    println!();
 }

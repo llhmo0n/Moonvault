@@ -1,0 +1,15 @@
+{
+  "936e8215f4c96d1470c5a4861ab6d93d": {
+    "invoice_id": "936e8215f4c96d1470c5a4861ab6d93d",
+    "service_type": "VaultCreate",
+    "user_pubkey": "02abc123test",
+    "fee_sats": 10000,
+    "fee_pool_address": "tb1q_FEE_POOL_ADDRESS_HERE",
+    "network": "testnet",
+    "created_at": 1765996713,
+    "expires_at": 1766083113,
+    "status": "Pending",
+    "payment_txid": null,
+    "confirmations": 0
+  }
+}

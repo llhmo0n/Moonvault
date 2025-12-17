@@ -1,9 +1,17 @@
 [package]
-name = "mooncoin"
-version = "2.0.0"
+name = "moonvault"
+version = "4.0.0"
 edition = "2021"
 authors = ["KNKI"]
-description = "Mooncoin - La plata digital. Bitcoin 2009 style in Rust 2025."
+description = "MoonVault - Bitcoin Security Infrastructure. Protecting your Bitcoin, not replacing it."
+repository = "https://github.com/llhmo0n/MoonVault"
+license = "MIT"
+keywords = ["bitcoin", "security", "vault", "custody", "infrastructure"]
+categories = ["cryptography", "command-line-utilities"]
+
+[[bin]]
+name = "moonvault"
+path = "src/main.rs"
 
 [dependencies]
 # Criptografía base
